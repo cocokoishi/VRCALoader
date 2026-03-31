@@ -13,7 +13,7 @@ The Unity Editor can use a script to call the `StartLoadBundle` function, which 
 ### 3. What can this be used for?
 It can be used for a lot of things!
 
-* **3.1 Recovering from Local build:** If you've lost your avatar's project files but haven't cleared your cache, you can find your avatar's local assetbundle file (the VRCA) at `C:\Users\**YourUsername**\AppData\LocalLow\VRChat\VRChat\Avatars`. Using this tool, you can load it directly into the current scene to help you recover your facial blendshape values, shader parameters, and more.
+* **3.1 Recovering from Local build:** If you've lost your avatar's project files but haven't cleared your cache, you can find your avatar's local assetbundle file (the VRCA) at `C:\Users\**YourUsername**\AppData\LocalLow\VRChat\VRChat\Avatars`. Using this tool, you can load it directly into the current scene to help you recover your facial blendshape values, shader parameters, and more. Since this data is saved on memory, it is transient and cannot be stored or re-uploaded directly. Your best bet is to use the loaded data as a guide and manually recreate your work.
 * **3.2 Recovering from the Cloud:** If your local avatar files are completely gone, I recommend using [https://github.com/200Tigersbloxed/dVRC](https://github.com/200Tigersbloxed/dVRC). It uses VRChat-permitted APIs to re-download your cloud-uploaded VRCA package and can also load it directly into the scene.
 
 ### 4. Don't do anything stupid.
