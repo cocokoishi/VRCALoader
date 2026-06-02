@@ -1,0 +1,170 @@
+# Builds release artifacts when a `v*.*.*` tag is pushed.
+#
+#   .zip               — VPM-style archive: package contents at the zip root,
+#                        unpack into  Packages/dev.cocokoishi.vrcaloader/
+#   .unitypackage      — classic drag-and-drop import; files are placed under
+#                        Assets/dev.cocokoishi.vrcaloader/
+#
+# Requires no Unity license. The .unitypackage is built from the .meta files
+# already committed in the repo (Unity generates them on first import — make
+# sure you commit them).
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release as (e.g. v0.1.0). Leave empty to build a dry-run artifact.'
+        required: false
+        default: ''
+
+permissions:
+  contents: write     # needed by softprops/action-gh-release
+
+env:
+  PACKAGE_NAME: dev.cocokoishi.vrcaloader
+  # If the package source is at the repo root, leave this as "."
+  # If it's nested (e.g. Packages/dev.cocokoishi.vrcaloader), set the path here.
+  PACKAGE_SOURCE: '.'
+  # The folder name files will live under inside the .unitypackage
+  # (i.e. Assets/<UNITYPACKAGE_ROOT>/...).
+  UNITYPACKAGE_ROOT: dev.cocokoishi.vrcaloader
+
+jobs:
+  build-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # --------------------------------------------------------------
+      # Resolve version from tag, or from package.json on dispatch.
+      # --------------------------------------------------------------
+      - name: Resolve version
+        id: ver
+        run: |
+          set -e
+          if [ -n "${GITHUB_REF#refs/tags/v}" ] && [ "${GITHUB_REF#refs/tags/}" != "$GITHUB_REF" ]; then
+            VERSION="${GITHUB_REF#refs/tags/v}"
+            TAG="${GITHUB_REF#refs/tags/}"
+          elif [ -n "${{ github.event.inputs.tag }}" ]; then
+            TAG="${{ github.event.inputs.tag }}"
+            VERSION="${TAG#v}"
+          else
+            VERSION="$(node -p "require('./${{ env.PACKAGE_SOURCE }}/package.json').version")"
+            TAG="v${VERSION}-dryrun"
+          fi
+          echo "version=${VERSION}"           >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}"                   >> "$GITHUB_OUTPUT"
+          echo "Resolved version=${VERSION} tag=${TAG}"
+
+      # --------------------------------------------------------------
+      # Sanity-check: package.json version matches the tag.
+      # --------------------------------------------------------------
+      - name: Verify package.json version matches tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          PKG_VERSION="$(node -p "require('./${{ env.PACKAGE_SOURCE }}/package.json').version")"
+          if [ "$PKG_VERSION" != "${{ steps.ver.outputs.version }}" ]; then
+            echo "::error::package.json version ($PKG_VERSION) does not match tag (${{ steps.ver.outputs.version }})."
+            exit 1
+          fi
+
+      # --------------------------------------------------------------
+      # Sanity-check: every .cs / .asmdef / .json has a matching .meta
+      # so the .unitypackage isn't missing files.
+      # --------------------------------------------------------------
+      - name: Sanity-check .meta coverage
+        run: |
+          set -e
+          MISSING=0
+          while IFS= read -r f; do
+            if [ ! -f "${f}.meta" ]; then
+              echo "::warning file=${f}::Missing companion .meta — Unity has not been opened on this checkout, or .meta was not committed."
+              MISSING=$((MISSING+1))
+            fi
+          done < <(find "${{ env.PACKAGE_SOURCE }}" \
+              -type f \
+              \( -name '*.cs' -o -name '*.asmdef' -o -name '*.json' -o -name '*.md' -o -name 'LICENSE' \) \
+              -not -path '*/.git/*' -not -path '*/.github/*' -not -path '*/dist/*')
+          if [ "$MISSING" -gt 0 ]; then
+            echo "::error::${MISSING} file(s) are missing .meta companions. Open the project in Unity once and commit the generated .meta files."
+            exit 1
+          fi
+
+      - name: Prepare staging dir
+        run: |
+          mkdir -p dist staging/Assets
+          # Copy the package source into staging/Assets/<ROOT> so the
+          # create-unitypackage action sees a normal Unity project layout.
+          rsync -a \
+            --exclude='.git' \
+            --exclude='.github' \
+            --exclude='dist' \
+            --exclude='staging' \
+            --exclude='*.unitypackage' \
+            "${{ env.PACKAGE_SOURCE }}/" "staging/Assets/${{ env.UNITYPACKAGE_ROOT }}/"
+
+      # --------------------------------------------------------------
+      # Build the VPM-style .zip.
+      # --------------------------------------------------------------
+      - name: Build VPM .zip
+        run: |
+          (cd "staging/Assets/${{ env.UNITYPACKAGE_ROOT }}" && \
+            zip -r "${GITHUB_WORKSPACE}/dist/${{ env.PACKAGE_NAME }}-${{ steps.ver.outputs.version }}.zip" .)
+          ls -lh dist/
+
+      # --------------------------------------------------------------
+      # Build the .unitypackage using create-unitypackage action
+      # (no Unity installation required).
+      # --------------------------------------------------------------
+      - name: Generate meta list
+        run: find staging -name '*.meta' | sed 's|^staging/||' | sort > metaList
+
+      - name: Build .unitypackage
+        uses: pCYSl5EDgo/create-unitypackage@v1
+        with:
+          project-folder: staging
+          package-path: 'dist/${{ env.PACKAGE_NAME }}-${{ steps.ver.outputs.version }}.unitypackage'
+          include-files: metaList
+
+      - name: Upload artifacts (always)
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ steps.ver.outputs.tag }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 30
+
+      # --------------------------------------------------------------
+      # Cut the GitHub Release. Skipped on workflow_dispatch dry runs.
+      # --------------------------------------------------------------
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ steps.ver.outputs.tag }}
+          tag_name: ${{ steps.ver.outputs.tag }}
+          generate_release_notes: true
+          files: |
+            dist/${{ env.PACKAGE_NAME }}-${{ steps.ver.outputs.version }}.zip
+            dist/${{ env.PACKAGE_NAME }}-${{ steps.ver.outputs.version }}.unitypackage
+          body: |
+            ## Install
+
+            **VPM (recommended):** add this repo to VCC, or unzip
+            `${{ env.PACKAGE_NAME }}-${{ steps.ver.outputs.version }}.zip`
+            into `Packages/${{ env.PACKAGE_NAME }}/`.
+
+            **Classic (.unitypackage):** drag
+            `${{ env.PACKAGE_NAME }}-${{ steps.ver.outputs.version }}.unitypackage`
+            into your open Unity project. Files land under
+            `Assets/${{ env.UNITYPACKAGE_ROOT }}/`.
+
+            ---
+
+            See the auto-generated changelog below for what changed.

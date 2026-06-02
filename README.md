@@ -3,7 +3,7 @@ This is a tool that allows you to load VRCA/VRCW files directly into the Unity E
 > **Warning:** This tool is to help you recover your own avatars!
 
 ### 1. How to install and use?
-Put it into your project's Assets/Editor/VRCALoader.cs Directory. Then use it from Tool/VRCALoader. After selecting your vrca, load and double click spawn to spawn it into the hierarchy and scene.
+Put it into your project's `Assets/VRCALoader/Editor/` directory. Then use it from Tools > VRCALoader. After selecting your vrca, load and double click spawn to spawn it into the hierarchy and scene.
 
 <img width="1254" height="895" alt="image" src="https://github.com/user-attachments/assets/aa8ee5fe-3acd-40a5-a346-52876dd0c02d" />
 
