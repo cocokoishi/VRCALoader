@@ -703,10 +703,11 @@ namespace SimpleUtils
 
 #if VRC_SDK_VRCSDK3
         /// <summary>
-        /// VRCSDK assumes every AnimatorController has at least one layer and accesses
-        /// <c>controller.layers[0]</c> without checking length. Controllers from third-party
-        /// bundles can ship with zero layers, which crashes the avatar inspector. Patch them
-        /// with a stub layer on spawn so the editor survives.
+        /// AnimatorControllers from AssetBundles may fail to deserialize their internal
+        /// layers, arriving with zero layers. The VRCSDK inspector blindly accesses
+        /// <c>controller.layers[0]</c> and crashes. Give each broken controller a single
+        /// empty layer so the inspector survives while the controller reference stays
+        /// intact in the avatar descriptor.
         /// </summary>
         private static void FixEmptyAnimatorControllers(GameObject root)
         {
@@ -718,24 +719,12 @@ namespace SimpleUtils
 
             foreach (var layer in descriptor.baseAnimationLayers)
             {
-                PatchController(layer.animatorController);
+                if (layer.isDefault) continue;
+                var ac = layer.animatorController as UnityEditor.Animations.AnimatorController;
+                if (ac != null && ac.layers.Length == 0)
+                    ac.layers = new UnityEditor.Animations.AnimatorControllerLayer[1]
+                        { new UnityEditor.Animations.AnimatorControllerLayer() };
             }
-
-            foreach (var layer in descriptor.specialAnimationLayers)
-            {
-                PatchController(layer.animatorController);
-            }
-        }
-
-        private static void PatchController(UnityEngine.Object controllerRef)
-        {
-            var ac = controllerRef as UnityEditor.Animations.AnimatorController;
-            if (ac == null || ac.layers.Length > 0) return;
-            ac.AddLayer(new UnityEditor.Animations.AnimatorControllerLayer
-            {
-                name = "_Stub",
-                defaultWeight = 1f,
-            });
         }
 #endif
 
