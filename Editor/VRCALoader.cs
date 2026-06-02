@@ -580,13 +580,17 @@ namespace SimpleUtils
                         slot.progress = 0f;
                         needsRepaint = true;
 
-#if VRC_SDK_VRCSDK3
                         foreach (var asset in slot.assets)
                         {
+                            asset.hideFlags = HideFlags.DontSaveInEditor | HideFlags.DontSaveInBuild;
+#if VRC_SDK_VRCSDK3
                             if (asset is GameObject go)
-                                FixEmptyAnimatorControllers(go);
-                        }
+                            {
+                                if (!Application.isPlaying) FixEmptyAnimatorControllers(go);
+                                RemovePipelineManager(go);
+                            }
 #endif
+                        }
 
                         Debug.Log($"[VRCALoader] Loaded: {slot.assets.Length} assets");
                         break;
@@ -688,11 +692,13 @@ namespace SimpleUtils
                         ?? (GameObject)Instantiate(prefab);
             if (instance == null) return;
 
+            instance.hideFlags = HideFlags.DontSaveInEditor | HideFlags.DontSaveInBuild;
             instance.name = prefab.name;
             instance.transform.position = Vector3.zero;
 
 #if VRC_SDK_VRCSDK3
-            FixEmptyAnimatorControllers(instance);
+            if (!Application.isPlaying) FixEmptyAnimatorControllers(instance);
+            RemovePipelineManager(instance);
 #endif
             Undo.RegisterCreatedObjectUndo(instance, "Spawn from Bundle");
             Selection.activeGameObject = instance;
@@ -703,11 +709,22 @@ namespace SimpleUtils
 
 #if VRC_SDK_VRCSDK3
         /// <summary>
-        /// AnimatorControllers from AssetBundles may fail to deserialize their internal
-        /// layers, arriving with zero layers. The VRCSDK inspector blindly accesses
-        /// <c>controller.layers[0]</c> and crashes. Give each broken controller a single
-        /// empty layer so the inspector survives while the controller reference stays
-        /// intact in the avatar descriptor.
+        /// Strip <c>VRC.Core.PipelineManager</c> — a VRChat networking component that
+        /// serves no purpose outside the VRChat runtime and can interfere with other
+        /// Play Mode tools that enumerate avatar descriptors.
+        /// </summary>
+        private static void RemovePipelineManager(GameObject root)
+        {
+            foreach (var c in root.GetComponentsInChildren<VRC.Core.PipelineManager>(true))
+                DestroyImmediate(c);
+        }
+
+        /// <summary>
+        /// AnimatorControllers from AssetBundles may fail to fully deserialize and
+        /// arrive with zero layers.  The VRCSDK inspector blindly accesses
+        /// <c>controller.layers[0]</c> and crashes.  Patch them in Edit Mode only;
+        /// in Play Mode the raw bundle state is correct enough for runtime consumers
+        /// like GestureManager, and modifying controllers at runtime is unsafe.
         /// </summary>
         private static void FixEmptyAnimatorControllers(GameObject root)
         {
