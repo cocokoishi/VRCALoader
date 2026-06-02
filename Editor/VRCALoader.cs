@@ -33,8 +33,8 @@ namespace SimpleUtils
         private int slotCount = 1;
         private bool anySlotLoading;
 
-        private const string PREF_SLOT_COUNT = "VRCALoader.SlotCount";
-        private const string PREF_PATHS = "VRCALoader.Paths";
+        private static string SettingsPath =>
+            Path.GetFullPath(Path.Combine(Application.dataPath, "VRCALoader/vrcaloader-settings.json"));
         // Modern Ai icon: dark charcoal bg, vibrant orange text
         private static readonly Color BadgeBg = new Color(0.17f, 0.024f, 0.024f); // deep red-brown #2C0606
         private static readonly Color BadgeFg = new Color(1f, 0.604f, 0f);         // bright orange #FF9A00
@@ -74,45 +74,71 @@ namespace SimpleUtils
 
         private void LoadState()
         {
-            slotCount = EditorPrefs.GetInt(PREF_SLOT_COUNT, 1);
-            var json = EditorPrefs.GetString(PREF_PATHS, "");
             slots.Clear();
-            slotCount = Mathf.Clamp(slotCount, 0, 32);
 
-            if (!string.IsNullOrEmpty(json))
+            if (!File.Exists(SettingsPath))
             {
-                try
-                {
-                    var data = JsonUtility.FromJson<PathData>(json);
-                    if (data != null && data.items != null)
-                    {
-                        foreach (var p in data.items)
-                            slots.Add(new BundleSlot { path = p ?? "" });
-                        while (slots.Count < slotCount)
-                            slots.Add(new BundleSlot());
-                        return;
-                    }
-                }
-                catch { }
+                slotCount = 1;
+                slots.Add(new BundleSlot());
+                return;
             }
 
-            for (int i = 0; i < slotCount; i++)
+            try
+            {
+                var json = File.ReadAllText(SettingsPath);
+                var data = JsonUtility.FromJson<SettingsData>(json);
+                if (data == null)
+                {
+                    slotCount = 1;
+                    slots.Add(new BundleSlot());
+                    return;
+                }
+
+                slotCount = Mathf.Clamp(data.slotCount, 0, 32);
+                if (data.paths != null)
+                {
+                    foreach (var p in data.paths)
+                        slots.Add(new BundleSlot { path = p ?? "" });
+                }
+                while (slots.Count < slotCount)
+                    slots.Add(new BundleSlot());
+            }
+            catch
+            {
+                slotCount = 1;
                 slots.Add(new BundleSlot());
+            }
         }
 
         private void SaveState()
         {
-            EditorPrefs.SetInt(PREF_SLOT_COUNT, slotCount);
-            var list = new List<string>(slots.Count);
-            foreach (var s in slots)
-                list.Add(s.path ?? "");
-            EditorPrefs.SetString(PREF_PATHS, JsonUtility.ToJson(new PathData { items = list }));
+            try
+            {
+                var data = new SettingsData
+                {
+                    slotCount = slotCount,
+                    paths = new List<string>(slots.Count),
+                };
+                foreach (var s in slots)
+                    data.paths.Add(s.path ?? "");
+
+                var dir = Path.GetDirectoryName(SettingsPath);
+                if (!Directory.Exists(dir))
+                    Directory.CreateDirectory(dir);
+
+                File.WriteAllText(SettingsPath, JsonUtility.ToJson(data, true));
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"[VRCALoader] Failed to save settings: {e.Message}");
+            }
         }
 
         [Serializable]
-        private sealed class PathData
+        private sealed class SettingsData
         {
-            public List<string> items = new List<string>();
+            public int slotCount = 1;
+            public List<string> paths = new List<string>();
         }
 
         // ── GUI ────────────────────────────────────────────
