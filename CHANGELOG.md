@@ -2,6 +2,11 @@
 
 All notable changes to this package will be documented in this file.
 
+## [0.0.2] - 2026-06-02
+
+### Fixed
+- Spawning a VRChat avatar whose AnimatorController has zero layers no longer triggers `IndexOutOfRangeException` in the VRCSDK avatar inspector (`VRCAvatarDescriptorEditor3.SetLayerMaskFromController`). Empty controllers are patched with a stub layer on spawn.
+
 ## [0.0.1] - 2026-06-02
 
 ### Added

@@ -5,8 +5,6 @@ This is a tool that allows you to load VRCA/VRCW files directly into the Unity E
 ### 1. How to install and use?
 Put it into your project's `Assets/VRCALoader/Editor/` directory. Then use it from Tools > VRCALoader. After selecting your vrca, load and double click spawn to spawn it into the hierarchy and scene.
 
-<img width="1254" height="895" alt="image" src="https://github.com/user-attachments/assets/aa8ee5fe-3acd-40a5-a346-52876dd0c02d" />
-
 ### 2. How does it work?
 The Unity Editor can use a script to call the AssetBundle.LoadFromFileAsync AssetBundle.LoadAllAssetsAsync PrefabUtility.InstantiatePrefab/Instantiate functions, which directly loads a VRCA assetbundle file into the current scene without needing the actual project files at all.
 

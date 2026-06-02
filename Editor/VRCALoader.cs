@@ -580,6 +580,14 @@ namespace SimpleUtils
                         slot.progress = 0f;
                         needsRepaint = true;
 
+#if VRC_SDK_VRCSDK3
+                        foreach (var asset in slot.assets)
+                        {
+                            if (asset is GameObject go)
+                                FixEmptyAnimatorControllers(go);
+                        }
+#endif
+
                         Debug.Log($"[VRCALoader] Loaded: {slot.assets.Length} assets");
                         break;
                 }
@@ -683,12 +691,53 @@ namespace SimpleUtils
             instance.name = prefab.name;
             instance.transform.position = Vector3.zero;
 
+#if VRC_SDK_VRCSDK3
+            FixEmptyAnimatorControllers(instance);
+#endif
             Undo.RegisterCreatedObjectUndo(instance, "Spawn from Bundle");
             Selection.activeGameObject = instance;
             EditorGUIUtility.PingObject(instance);
 
             slot.spawned.Add(instance);
         }
+
+#if VRC_SDK_VRCSDK3
+        /// <summary>
+        /// VRCSDK assumes every AnimatorController has at least one layer and accesses
+        /// <c>controller.layers[0]</c> without checking length. Controllers from third-party
+        /// bundles can ship with zero layers, which crashes the avatar inspector. Patch them
+        /// with a stub layer on spawn so the editor survives.
+        /// </summary>
+        private static void FixEmptyAnimatorControllers(GameObject root)
+        {
+            var descriptor = root.GetComponent<VRC.SDK3.Avatars.Components.VRCAvatarDescriptor>();
+            if (descriptor == null) return;
+
+            var animator = root.GetComponent<Animator>();
+            if (animator == null || !animator.isHuman) return;
+
+            foreach (var layer in descriptor.baseAnimationLayers)
+            {
+                PatchController(layer.animatorController);
+            }
+
+            foreach (var layer in descriptor.specialAnimationLayers)
+            {
+                PatchController(layer.animatorController);
+            }
+        }
+
+        private static void PatchController(UnityEngine.Object controllerRef)
+        {
+            var ac = controllerRef as UnityEditor.Animations.AnimatorController;
+            if (ac == null || ac.layers.Length > 0) return;
+            ac.AddLayer(new UnityEditor.Animations.AnimatorControllerLayer
+            {
+                name = "_Stub",
+                defaultWeight = 1f,
+            });
+        }
+#endif
 
         // ── Rounded-rect texture (Illustrator icon style) ──
 
