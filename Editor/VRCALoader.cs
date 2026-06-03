@@ -67,8 +67,29 @@ namespace Cocokoishi.VRCALoader
 
         private void OnPlayModeStateChanged(PlayModeStateChange state)
         {
-            if (state == PlayModeStateChange.ExitingEditMode || state == PlayModeStateChange.ExitingPlayMode)
+            if (state == PlayModeStateChange.ExitingEditMode)
+            {
                 UnloadAll();
+            }
+            else if (state == PlayModeStateChange.ExitingPlayMode)
+            {
+                // Unity tears down all Play Mode objects automatically.
+                // Calling DestroyImmediate or AssetBundle.Unload here would
+                // race with Unity's own cleanup and crash (Access Violation).
+                foreach (var slot in _slots)
+                {
+                    slot.routine = null;
+                    slot.spawned.Clear();
+                    if (slot.bundle != null) { slot.bundle.Unload(false); slot.bundle = null; }
+                    slot.assets = null;
+                    slot.scenePaths = null;
+                    slot.isSceneBundle = false;
+                    slot.progress = 0f;
+                    slot.stage = "";
+                }
+                _running.Clear();
+                EditorApplication.update -= Drive;
+            }
         }
 
         [Serializable]
@@ -186,7 +207,7 @@ namespace Cocokoishi.VRCALoader
             {
                 if (asset == null) continue;
                 asset.hideFlags = HideFlags.DontSaveInEditor | HideFlags.DontSaveInBuild;
-#if VRC_SDK_VRCSDK3
+#if VRC_SDK_VRCSDK3 && !UDON
                 if (asset is GameObject go)
                 {
                     StripPipelineManager(go);
@@ -229,7 +250,7 @@ namespace Cocokoishi.VRCALoader
             instance.name = source.name;
             instance.hideFlags = HideFlags.DontSaveInEditor | HideFlags.DontSaveInBuild;
             instance.transform.position = Vector3.zero;
-#if VRC_SDK_VRCSDK3
+#if VRC_SDK_VRCSDK3 && !UDON
             StripPipelineManager(instance);
             if (!Application.isPlaying) PatchEmptyControllers(instance);
 #endif
@@ -241,7 +262,11 @@ namespace Cocokoishi.VRCALoader
 
         // ── Controller patching ────────────────────────────
 
-#if VRC_SDK_VRCSDK3
+        // VRC_SDK_VRCSDK3 is defined by both Worlds and Avatars SDKs, but
+        // VRC.SDK3.Avatars types only exist when the Avatars SDK is installed.
+        // UDON is only defined by the Worlds SDK, so !UDON prevents compiling
+        // avatar-specific code in Worlds-only projects. Pattern from FACS01.
+#if VRC_SDK_VRCSDK3 && !UDON
         private static void StripPipelineManager(GameObject root)
         {
             foreach (var pm in root.GetComponentsInChildren<VRC.Core.PipelineManager>(true))
@@ -262,17 +287,11 @@ namespace Cocokoishi.VRCALoader
             var descriptor = root.GetComponent<VRC.SDK3.Avatars.Components.VRCAvatarDescriptor>();
             if (!descriptor) return;
 
-            PatchLayers(descriptor.baseAnimationLayers);
-        }
-
-        private static void PatchLayers(
-            VRC.SDK3.Avatars.Components.VRCAvatarDescriptor.CustomAnimLayer[] layers)
-        {
-            if (layers == null) return;
-            foreach (var layer in layers)
+            foreach (var layer in descriptor.baseAnimationLayers)
             {
                 if (layer.isDefault) continue;
-                if (layer.animatorController is UnityEditor.Animations.AnimatorController ac
+                if (layer.animatorController
+                    is UnityEditor.Animations.AnimatorController ac
                     && ac.layers.Length == 0)
                 {
                     ac.layers = new UnityEditor.Animations.AnimatorControllerLayer[1]
@@ -337,6 +356,13 @@ namespace Cocokoishi.VRCALoader
             EditorGUILayout.BeginVertical();
             GUILayout.Space(4);
             EditorGUILayout.LabelField("VRCALoader", new GUIStyle(GUI.skin.label) { fontSize = 15, fontStyle = FontStyle.Bold, normal = { textColor = Color.white } }, GUILayout.Height(20));
+            var headerLinkRect = GUILayoutUtility.GetLastRect();
+            EditorGUIUtility.AddCursorRect(headerLinkRect, MouseCursor.Link);
+            if (Event.current.type == EventType.MouseDown && headerLinkRect.Contains(Event.current.mousePosition))
+            {
+                Application.OpenURL("https://github.com/cocokoishi/VRCALoader");
+                Event.current.Use();
+            }
             EditorGUILayout.LabelField("AssetBundle Loader", EditorStyles.miniLabel, GUILayout.Height(14));
             GUILayout.Space(2);
             EditorGUILayout.EndVertical();
@@ -480,6 +506,8 @@ namespace Cocokoishi.VRCALoader
                 SaveState();
             }
             GUILayout.FlexibleSpace();
+            if (GUILayout.Button("Tutorial", EditorStyles.toolbarButton, GUILayout.Width(56)))
+                TutorialWindow.Open();
             EditorGUILayout.EndHorizontal();
         }
 

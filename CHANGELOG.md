@@ -2,6 +2,18 @@
 
 All notable changes to this package will be documented in this file.
 
+## [0.1.0] - 2026-06-03
+
+### Added
+- Header title "VRCALoader" now links to the GitHub repository (https://github.com/cocokoishi/VRCALoader).
+- Tutorial button in the footer toolbar opens a dedicated Tutorial window covering installation, usage, use cases (local/cloud recovery with links to unity-blendshape-to-json and dVRC), and controller extraction.
+
+### Changed
+- `#if VRC_SDK_VRCSDK3` guards tightened to `#if VRC_SDK_VRCSDK3 && !UDON`, matching the FACS01 compatibility pattern so the editor compiles in Worlds-only projects where `VRC.SDK3.Avatars` types are absent.
+
+### Fixed
+- Exiting Play Mode while a bundle is loaded no longer crashes Unity. `DestroyImmediate` and `AssetBundle.Unload(true)` were racing with Unity's own scene teardown during `ExitingPlayMode` — now `Unload(false)` is used instead, releasing the bundle handle without touching instantiated objects that Unity is already cleaning up.
+
 ## [0.0.5] - 2026-06-03
 
 ### Changed
