@@ -3,7 +3,7 @@ Load VRCA/VRCW AssetBundle files directly into the Unity Editor for avatar inspe
 > **Warning:** This tool is meant for recovering your own avatars only.
 
 ### 1. Installation & Usage
-Place the package under `Assets/VRCALoader/` in your project, then open it via **Tools > VRCALoader**. Select a `.vrca` or `.vrcw` file in a slot, click **Load**, then double-click any asset or click **Spawn** to instantiate it into the scene.
+Install via unitypackage from our latest releases. Open it via **Tools > VRCALoader**. Select a `.vrca` or `.vrcw` file in a slot, click **Load**, then double-click any asset or click **Spawn** to instantiate it into the scene.
 
 ### 2. How It Works
 The tool calls `AssetBundle.LoadFromFileAsync`, `LoadAllAssetsAsync`, and `Object.Instantiate` to load a bundle straight into memory and place its contents in the current scene — no original project files required.
