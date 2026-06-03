@@ -167,13 +167,17 @@ namespace Cocokoishi.VRCALoader
                         EditorGUILayout.LabelField(c.fileName);
                         if (GUILayout.Button("Open", EditorStyles.miniButton, GUILayout.Width(44)))
                         {
-                            var asset = AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(
-                                "Assets" + c.filePath.Substring(Application.dataPath.Length));
-                            if (asset) { Selection.activeObject = asset; AssetDatabase.OpenAsset(asset); }
-                            else EditorUtility.RevealInFinder(c.filePath);
+                            var relPath = "Assets" + c.filePath
+                                .Substring(Application.dataPath.Length)
+                                .Replace('\\', '/');
+                            var asset = AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(relPath);
+                            if (asset != null)
+                                { Selection.activeObject = asset; AssetDatabase.OpenAsset(asset); }
+                            else
+                                EditorUtility.OpenWithDefaultApp(c.filePath);
                         }
-                        if (GUILayout.Button("Copy", EditorStyles.miniButton, GUILayout.Width(44)))
-                            GUIUtility.systemCopyBuffer = c.filePath;
+                        if (GUILayout.Button("Reveal", EditorStyles.miniButton, GUILayout.Width(48)))
+                            EditorUtility.RevealInFinder(c.filePath);
                         EditorGUILayout.EndHorizontal();
                     }
                     EditorGUILayout.EndVertical();
