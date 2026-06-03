@@ -23,7 +23,7 @@ namespace Cocokoishi.VRCALoader
         private static readonly string AssetRipperDir = Path.GetFullPath(
             Path.Combine(Application.dataPath, "VRCALoader/Assetripper"));
         private static readonly string AssetRipperExe = Path.Combine(AssetRipperDir, "AssetRipper.GUI.Free.exe");
-        private static readonly string ExportsDir = Path.Combine(AssetRipperDir, "Exports");
+        private static readonly string ExportsRoot = Path.Combine(AssetRipperDir, "Exports");
 
         private const string DownloadUrl =
             "https://github.com/AssetRipper/AssetRipper/releases/download/1.3.14/AssetRipper_win_x64.zip";
@@ -33,6 +33,7 @@ namespace Cocokoishi.VRCALoader
 
         private int _selectedIndex = -1;
         private string _bundlePath = "";
+        private string _currentExportDir = "";
         private Vector2 _scroll;
         private string _status = "";
         private bool _busy;
@@ -134,7 +135,9 @@ namespace Cocokoishi.VRCALoader
             GUILayout.FlexibleSpace();
             EditorGUILayout.BeginHorizontal(EditorStyles.toolbar);
             if (GUILayout.Button("Open Exports Folder", EditorStyles.toolbarButton))
-                EditorUtility.RevealInFinder(ExportsDir);
+                EditorUtility.RevealInFinder(
+                    !string.IsNullOrEmpty(_currentExportDir) && Directory.Exists(_currentExportDir)
+                        ? _currentExportDir : ExportsRoot);
             if (GUILayout.Button("Clear Exports", EditorStyles.toolbarButton))
                 ClearExports();
             GUILayout.FlexibleSpace();
@@ -264,19 +267,14 @@ namespace Cocokoishi.VRCALoader
             }
         }
 
-        private static void PrepareExportDir()
+        private void PrepareExportDir()
         {
-            if (Directory.Exists(ExportsDir))
-            {
-                // Delete everything inside
-                var di = new DirectoryInfo(ExportsDir);
-                foreach (var f in di.GetFiles()) f.Delete();
-                foreach (var d in di.GetDirectories()) d.Delete(true);
-            }
-            else
-            {
-                Directory.CreateDirectory(ExportsDir);
-            }
+            if (!Directory.Exists(ExportsRoot))
+                Directory.CreateDirectory(ExportsRoot);
+
+            var timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
+            _currentExportDir = Path.Combine(ExportsRoot, timestamp);
+            Directory.CreateDirectory(_currentExportDir);
         }
 
         private void RunAssetRipper()
@@ -338,13 +336,13 @@ namespace Cocokoishi.VRCALoader
             Repaint();
 
             var exportOk = PostJson(baseUrl + "/api/command/export",
-                $"{{\"exportPath\":\"{EscapeJson(ExportsDir)}\",\"exportType\":0}}");
+                $"{{\"exportPath\":\"{EscapeJson(_currentExportDir)}\",\"exportType\":0}}");
 
             if (!exportOk)
             {
                 // Try legacy endpoint
                 exportOk = PostJson(baseUrl + "/api/export",
-                    $"{{\"path\":\"{EscapeJson(ExportsDir)}\"}}");
+                    $"{{\"path\":\"{EscapeJson(_currentExportDir)}\"}}");
             }
 
             // Wait for export to complete
@@ -427,14 +425,14 @@ namespace Cocokoishi.VRCALoader
         {
             _entries.Clear();
 
-            if (!Directory.Exists(ExportsDir))
+            if (string.IsNullOrEmpty(_currentExportDir) || !Directory.Exists(_currentExportDir))
             {
-                _status = "Exports directory not found.";
+                _status = "No export directory. Run an extraction first.";
                 return;
             }
 
             // Recursively find .controller files
-            var files = Directory.GetFiles(ExportsDir, "*.controller*", SearchOption.AllDirectories);
+            var files = Directory.GetFiles(_currentExportDir, "*.controller*", SearchOption.AllDirectories);
             foreach (var f in files)
             {
                 _entries.Add(new ControllerEntry
@@ -449,59 +447,38 @@ namespace Cocokoishi.VRCALoader
                 : $"Found {_entries.Count} controller(s).";
         }
 
-        private static void PostProcessExports()
+        private void PostProcessExports()
         {
-            if (!Directory.Exists(ExportsDir)) return;
+            if (string.IsNullOrEmpty(_currentExportDir) || !Directory.Exists(_currentExportDir)) return;
 
-            // Rename .shader → .shader.txt so Unity doesn't try to compile them
-            var shaderFiles = Directory.GetFiles(ExportsDir, "*.shader", SearchOption.AllDirectories);
-            foreach (var f in shaderFiles)
-            {
-                if (f.EndsWith(".txt")) continue;
-                var newPath = f + ".txt";
-                File.Move(f, newPath);
-                UnityEngine.Debug.Log($"[ControllerExtract] Renamed: {Path.GetFileName(f)} → {Path.GetFileName(newPath)}");
-            }
-
-            // Rename .cs → .cs.txt so Unity doesn't try to compile them
-            var scriptFiles = Directory.GetFiles(ExportsDir, "*.cs", SearchOption.AllDirectories);
-            foreach (var f in scriptFiles)
-            {
-                if (f.EndsWith(".txt")) continue;
-                var newPath = f + ".txt";
-                File.Move(f, newPath);
-                UnityEngine.Debug.Log($"[ControllerExtract] Renamed: {Path.GetFileName(f)} → {Path.GetFileName(newPath)}");
-            }
-
-            // Rename .cginc → .cginc.txt
-            var cgincFiles = Directory.GetFiles(ExportsDir, "*.cginc", SearchOption.AllDirectories);
-            foreach (var f in cgincFiles)
-            {
-                if (f.EndsWith(".txt")) continue;
-                File.Move(f, f + ".txt");
-            }
-
-            // Rename .hlsl → .hlsl.txt
-            var hlslFiles = Directory.GetFiles(ExportsDir, "*.hlsl", SearchOption.AllDirectories);
-            foreach (var f in hlslFiles)
-            {
-                if (f.EndsWith(".txt")) continue;
-                File.Move(f, f + ".txt");
-            }
+            RenameExtension(_currentExportDir, "*.shader");
+            RenameExtension(_currentExportDir, "*.cs");
+            RenameExtension(_currentExportDir, "*.cginc");
+            RenameExtension(_currentExportDir, "*.hlsl");
 
             AssetDatabase.Refresh();
         }
 
+        private static void RenameExtension(string dir, string pattern)
+        {
+            foreach (var f in Directory.GetFiles(dir, pattern, SearchOption.AllDirectories))
+            {
+                if (f.EndsWith(".txt")) continue;
+                File.Move(f, f + ".txt");
+            }
+        }
+
         private void ClearExports()
         {
-            if (!Directory.Exists(ExportsDir)) return;
+            if (!Directory.Exists(ExportsRoot)) return;
             if (!EditorUtility.DisplayDialog("Clear Exports",
-                    "Delete everything in the Exports directory?", "Delete", "Cancel"))
+                    "Delete every extraction under Exports/?", "Delete", "Cancel"))
                 return;
 
-            PrepareExportDir();
+            Directory.Delete(ExportsRoot, true);
+            _currentExportDir = "";
             _entries.Clear();
-            _status = "Exports cleared.";
+            _status = "All exports cleared.";
             AssetDatabase.Refresh();
         }
 
