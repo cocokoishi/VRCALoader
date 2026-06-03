@@ -18,12 +18,10 @@ AnimatorControllers inside a VRCA bundle are stripped of editor-layer data and s
 
 ---
 
-Credit to [dVRC](https://github.com/200Tigersbloxed/dVRC) for the original AssetBundle loading approach which inspired this project.
-
----
-
 ### Acknowledgements
 
-While reimplementing dVRC's bundle-loading functionality, I discovered **[FACS Utilities](https://github.com/FACS01-01/FACS_Utilities)** — a more comprehensive editor toolset that handles many VRChat SDK edge cases, including fixes the vanilla SDK inspector is missing. Our controller-patching approach references their `LoadBundle` implementation to ensure the avatar descriptor behaves correctly in both Edit and Play modes.
+The core concept of loading VRCA bundles directly into the Unity Editor was inspired by **[dVRC](https://github.com/200Tigersbloxed/dVRC)**.
 
-This project is designed to help recover as much of your original avatar logic as possible when the Unity project files are lost but the locally-built VRCA cache still exists. Special thanks to FACS Utilities for portions of the code we referenced.
+During development I discovered **[FACS Utilities](https://github.com/FACS01-01/FACS_Utilities)**, a more comprehensive toolset that handles many VRChat SDK edge cases. Its `LoadBundle` implementation informed the controller-patching logic that keeps the avatar descriptor from crashing on bundle-loaded avatars.
+
+This project is designed to help recover as much of your original avatar logic as possible when the Unity project files are lost but the locally-built VRCA cache still exists.
