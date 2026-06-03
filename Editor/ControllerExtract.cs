@@ -30,9 +30,17 @@ namespace Cocokoishi.VRCALoader
         private Vector2 _scroll;
         private string _status = "";
         private bool _busy;
+        private bool _stripNonControllers = true;
         private IEnumerator _routine;
 
-        private readonly List<ControllerEntry> _entries = new List<ControllerEntry>();
+        private readonly List<Extraction> _extractions = new List<Extraction>();
+
+        private sealed class Extraction
+        {
+            public string folderName;
+            public string fullPath;
+            public readonly List<ControllerEntry> controllers = new List<ControllerEntry>();
+        }
 
         private sealed class ControllerEntry
         {
@@ -60,13 +68,15 @@ namespace Cocokoishi.VRCALoader
         {
             EditorGUILayout.Space(4);
             EditorGUILayout.LabelField("AssetRipper Controller Extraction", EditorStyles.boldLabel);
-            EditorGUILayout.LabelField(
-                "Unpack a VRCA bundle through AssetRipper and list every " +
-                "AnimatorController found in the export.",
-                EditorStyles.wordWrappedMiniLabel);
 
-            EditorGUILayout.Space(6);
+            // ── Options ──
+            _stripNonControllers = EditorGUILayout.ToggleLeft(
+                "After export, delete all folders except AnimatorController",
+                _stripNonControllers);
 
+            EditorGUILayout.Space(4);
+
+            // ── Source ──
             EditorGUILayout.LabelField("Bundle from VRCALoader Slots", EditorStyles.miniLabel);
             EditorGUILayout.BeginHorizontal();
             var names = BundlePaths.Length > 0
@@ -81,10 +91,7 @@ namespace Cocokoishi.VRCALoader
 
             var newIdx = EditorGUILayout.Popup("Source", _selectedIndex, names);
             if (newIdx != _selectedIndex && newIdx < BundlePaths.Length)
-            {
-                _selectedIndex = newIdx;
-                _bundlePath = BundlePaths[_selectedIndex];
-            }
+            { _selectedIndex = newIdx; _bundlePath = BundlePaths[_selectedIndex]; }
 
             if (GUILayout.Button("Browse", GUILayout.Width(64)))
             {
@@ -93,58 +100,82 @@ namespace Cocokoishi.VRCALoader
             }
             EditorGUILayout.EndHorizontal();
 
+            // ── Actions ──
             EditorGUILayout.Space(4);
             EditorGUILayout.BeginHorizontal();
             GUI.enabled = !_busy && File.Exists(_bundlePath);
             if (GUILayout.Button("Extract Bundle", GUILayout.Height(28))) StartExtract();
             GUI.enabled = true;
-            if (GUILayout.Button("Scan Exports Folder", GUILayout.Height(28))) ScanExports();
+            if (GUILayout.Button("Refresh List", GUILayout.Height(28))) RefreshExtractions();
             EditorGUILayout.EndHorizontal();
+
+            var batPath = Path.Combine(AssetRipperDir, "startsh/start_assetripper.bat");
+            if (GUILayout.Button("Reveal start_assetripper.bat", EditorStyles.miniButton))
+                EditorUtility.RevealInFinder(batPath);
 
             if (_busy)
             {
-                EditorGUILayout.Space(4);
+                EditorGUILayout.Space(2);
                 EditorGUILayout.LabelField(_status, EditorStyles.centeredGreyMiniLabel);
             }
-
-            EditorGUILayout.Space(4);
-
-            if (_entries.Count > 0)
-            {
-                EditorGUILayout.LabelField($"Controllers found: {_entries.Count}", EditorStyles.miniBoldLabel);
-                _scroll = EditorGUILayout.BeginScrollView(_scroll, GUI.skin.box);
-                foreach (var e in _entries) DrawEntry(e);
-                EditorGUILayout.EndScrollView();
-            }
-
             if (!string.IsNullOrEmpty(_status) && !_busy)
                 EditorGUILayout.HelpBox(_status, MessageType.None);
+
+            EditorGUILayout.Space(6);
+
+            // ── Past Extractions ──
+            EditorGUILayout.LabelField("Extracted Controllers", EditorStyles.boldLabel);
+
+            if (_extractions.Count == 0)
+            {
+                EditorGUILayout.HelpBox("No extractions yet. Load a bundle and click Extract.", MessageType.Info);
+            }
+            else
+            {
+                _scroll = EditorGUILayout.BeginScrollView(_scroll);
+                foreach (var ex in _extractions)
+                {
+                    EditorGUILayout.BeginVertical(GUI.skin.box);
+                    EditorGUILayout.BeginHorizontal();
+                    EditorGUILayout.LabelField(ex.folderName, EditorStyles.boldLabel);
+                    GUILayout.FlexibleSpace();
+                    EditorGUILayout.LabelField($"{ex.controllers.Count} controller(s)", EditorStyles.miniLabel);
+                    if (GUILayout.Button("Reveal", EditorStyles.miniButton, GUILayout.Width(52)))
+                        EditorUtility.RevealInFinder(ex.fullPath);
+                    if (GUILayout.Button("Delete", EditorStyles.miniButton, GUILayout.Width(52)))
+                    {
+                        if (EditorUtility.DisplayDialog("Delete Extraction",
+                                $"Delete {ex.folderName}?", "Delete", "Cancel"))
+                        {
+                            Directory.Delete(ex.fullPath, true);
+                            _extractions.Remove(ex);
+                            AssetDatabase.Refresh();
+                            break; // collection modified
+                        }
+                    }
+                    EditorGUILayout.EndHorizontal();
+
+                    foreach (var c in ex.controllers)
+                    {
+                        EditorGUILayout.BeginHorizontal();
+                        GUILayout.Space(20);
+                        EditorGUILayout.LabelField(c.fileName, GUILayout.MinWidth(100));
+                        GUILayout.FlexibleSpace();
+                        if (GUILayout.Button("Copy", EditorStyles.miniButton, GUILayout.Width(44)))
+                            GUIUtility.systemCopyBuffer = c.filePath;
+                        EditorGUILayout.EndHorizontal();
+                    }
+                    EditorGUILayout.EndVertical();
+                }
+                EditorGUILayout.EndScrollView();
+            }
 
             GUILayout.FlexibleSpace();
             EditorGUILayout.BeginHorizontal(EditorStyles.toolbar);
             if (GUILayout.Button("Open Exports Folder", EditorStyles.toolbarButton))
-                EditorUtility.RevealInFinder(
-                    !string.IsNullOrEmpty(_currentExportDir) && Directory.Exists(_currentExportDir)
-                        ? _currentExportDir : ExportsRoot);
-            if (GUILayout.Button("Clear Exports", EditorStyles.toolbarButton)) ClearExports();
+                EditorUtility.RevealInFinder(ExportsRoot);
+            if (GUILayout.Button("Clear All Exports", EditorStyles.toolbarButton)) ClearExports();
             GUILayout.FlexibleSpace();
-            EditorGUILayout.EndHorizontal();
-        }
-
-        private void DrawEntry(ControllerEntry e)
-        {
-            EditorGUILayout.BeginHorizontal();
-            var icon = AssetPreview.GetMiniTypeThumbnail(typeof(UnityEditor.Animations.AnimatorController));
-            if (icon) GUILayout.Label(icon, GUILayout.Width(18), GUILayout.Height(18));
-            EditorGUILayout.LabelField(e.fileName, EditorStyles.boldLabel);
-            GUILayout.FlexibleSpace();
-            if (GUILayout.Button("Reveal", EditorStyles.miniButton, GUILayout.Width(52)))
-                EditorUtility.RevealInFinder(e.filePath);
-            if (GUILayout.Button("Copy Path", EditorStyles.miniButton, GUILayout.Width(72)))
-            {
-                GUIUtility.systemCopyBuffer = e.filePath;
-                _status = $"Copied: {e.filePath}";
-            }
             EditorGUILayout.EndHorizontal();
         }
 
@@ -157,7 +188,6 @@ namespace Cocokoishi.VRCALoader
 
             PrepareExportDir();
             _busy = true;
-            _entries.Clear();
             _routine = ExtractRoutine();
             EditorApplication.update += Pump;
             Repaint();
@@ -266,30 +296,59 @@ namespace Cocokoishi.VRCALoader
             _status = "Loading bundle into AssetRipper...";
             yield return null;
 
-            var loadForm = new WWWForm();
-            loadForm.AddField("path", _bundlePath);
-            using (var req = UnityWebRequest.Post(baseUrl + "/api/LoadFolder", loadForm))
-            { req.timeout = 30; var op = req.SendWebRequest(); while (!op.isDone) yield return null; }
+            {
+                var form = new WWWForm();
+                form.AddField("Path", _bundlePath);
+                using var req = UnityWebRequest.Post(baseUrl + "/LoadFile", form);
+                req.timeout = 60;
+                var op = req.SendWebRequest();
+                while (!op.isDone) yield return null;
+                if (req.result != UnityWebRequest.Result.Success)
+                {
+                    _status = $"LoadFile failed: {req.responseCode} {req.error}";
+                    UnityEngine.Debug.LogError($"[ControllerExtract] LoadFile {req.responseCode}: {req.downloadHandler?.text}");
+                    yield break;
+                }
+                UnityEngine.Debug.Log($"[ControllerExtract] LoadFile OK");
+            }
 
-            yield return new WaitForSecondsRealtime(2f);
+            _status = "Bundle loaded. Exporting...";
+            yield return new WaitForSecondsRealtime(1f);
 
             // ── Export ──
-            _status = "Exporting...";
-            yield return null;
+            {
+                var form = new WWWForm();
+                form.AddField("Path", _currentExportDir);
+                using var req = UnityWebRequest.Post(baseUrl + "/Export/UnityProject", form);
+                req.timeout = 600;
+                var op = req.SendWebRequest();
+                while (!op.isDone) yield return null;
+                if (req.result != UnityWebRequest.Result.Success)
+                {
+                    _status = $"Export failed: {req.responseCode} {req.error}";
+                    UnityEngine.Debug.LogError($"[ControllerExtract] Export {req.responseCode}: {req.downloadHandler?.text}");
+                    yield break;
+                }
+                UnityEngine.Debug.Log($"[ControllerExtract] Export OK");
+            }
 
-            var expForm = new WWWForm();
-            expForm.AddField("outputPath", _currentExportDir);
-            using (var req = UnityWebRequest.Post(baseUrl + "/api/ExportUnityProject", expForm))
-            { req.timeout = 120; var op = req.SendWebRequest(); while (!op.isDone) yield return null; }
+            // ── Strip non-controller folders if requested ──
+            if (_stripNonControllers)
+            {
+                _status = "Stripping non-controller assets...";
+                yield return null;
+                StripNonControllers(_currentExportDir);
+            }
 
-            // ── Post-process & scan ──
+            // ── Rename Shader/Scripts folders ──
             _status = "Post-processing...";
             yield return null;
             PostProcessExports();
 
+            // ── Scan & refresh list ──
             _status = "Scanning...";
             yield return null;
-            ScanExports();
+            RefreshExtractions();
 
             _status = "Extraction complete.";
         }
@@ -306,17 +365,44 @@ namespace Cocokoishi.VRCALoader
             Directory.CreateDirectory(_currentExportDir);
         }
 
-        private void ScanExports()
+        private void RefreshExtractions()
         {
-            _entries.Clear();
-            if (string.IsNullOrEmpty(_currentExportDir) || !Directory.Exists(_currentExportDir))
-            { _status = "No export directory. Run an extraction first."; return; }
-            var files = Directory.GetFiles(_currentExportDir, "*.controller*", SearchOption.AllDirectories);
-            foreach (var f in files)
-                _entries.Add(new ControllerEntry { filePath = f, fileName = Path.GetFileName(f) });
-            _status = _entries.Count == 0
-                ? "No .controller files found in export."
-                : $"Found {_entries.Count} controller(s).";
+            _extractions.Clear();
+            if (!Directory.Exists(ExportsRoot)) return;
+
+            foreach (var dir in Directory.GetDirectories(ExportsRoot))
+            {
+                var name = Path.GetFileName(dir);
+                var files = Directory.GetFiles(dir, "*.controller", SearchOption.AllDirectories)
+                    .Where(f => !f.EndsWith(".meta")).ToArray();
+
+                var ex = new Extraction { folderName = name, fullPath = dir };
+                foreach (var f in files)
+                    ex.controllers.Add(new ControllerEntry { filePath = f, fileName = Path.GetFileName(f) });
+                _extractions.Add(ex);
+            }
+        }
+
+        private static void StripNonControllers(string exportDir)
+        {
+            // Find the Assets folder AssetRipper exported
+            var assetsDir = FindDir(exportDir, "Assets");
+            if (assetsDir == null) return;
+
+            foreach (var sub in Directory.GetDirectories(assetsDir))
+            {
+                var name = Path.GetFileName(sub);
+                if (name.Equals("AnimatorController", StringComparison.OrdinalIgnoreCase)) continue;
+                try { Directory.Delete(sub, true); }
+                catch (Exception e) { UnityEngine.Debug.LogWarning($"[ControllerExtract] Could not delete {name}: {e.Message}"); }
+            }
+        }
+
+        private static string FindDir(string root, string name)
+        {
+            foreach (var d in Directory.GetDirectories(root, name, SearchOption.AllDirectories))
+                return d;
+            return null;
         }
 
         private void PostProcessExports()
@@ -342,11 +428,11 @@ namespace Cocokoishi.VRCALoader
         private void ClearExports()
         {
             if (!Directory.Exists(ExportsRoot)) return;
-            if (!EditorUtility.DisplayDialog("Clear Exports",
+            if (!EditorUtility.DisplayDialog("Clear All Exports",
                     "Delete every extraction under Exports/?", "Delete", "Cancel")) return;
             Directory.Delete(ExportsRoot, true);
             _currentExportDir = "";
-            _entries.Clear();
+            _extractions.Clear();
             _status = "All exports cleared.";
             AssetDatabase.Refresh();
         }
