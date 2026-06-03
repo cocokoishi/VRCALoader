@@ -167,7 +167,9 @@ namespace Cocokoishi.VRCALoader
             EditorGUILayout.EndHorizontal();
         }
 
-        // ── Extraction pipeline ───────────────────────────
+        // ── Extraction pipeline (coroutine-driven) ──────────
+
+        private IEnumerator _extractRoutine;
 
         private void Extract()
         {
@@ -177,110 +179,99 @@ namespace Cocokoishi.VRCALoader
                 _status = "Bundle file not found.";
                 return;
             }
-            // Check / auto-download AssetRipper on first use
+
+            PrepareExportDir();
+            _busy = true;
+            _entries.Clear();
+            _extractRoutine = ExtractRoutine();
+            EditorApplication.update += PumpExtract;
+            Repaint();
+        }
+
+        private void PumpExtract()
+        {
+            if (_extractRoutine == null)
+            {
+                EditorApplication.update -= PumpExtract;
+                return;
+            }
+
+            try
+            {
+                if (!_extractRoutine.MoveNext())
+                {
+                    EditorApplication.update -= PumpExtract;
+                    _extractRoutine = null;
+                    _busy = false;
+                }
+            }
+            catch (Exception e)
+            {
+                EditorApplication.update -= PumpExtract;
+                _extractRoutine = null;
+                _busy = false;
+                _status = $"Extraction failed: {e.Message}";
+                UnityEngine.Debug.LogError($"[ControllerExtract] {e}");
+            }
+            Repaint();
+        }
+
+        private IEnumerator ExtractRoutine()
+        {
+            // ── Ensure AssetRipper exists ──
             if (!File.Exists(AssetRipperExe))
             {
                 if (!EditorUtility.DisplayDialog(
                         "AssetRipper Required",
-                        "AssetRipper is not installed. Download ~120 MB from GitHub?\n\n" +
-                        "(You only need to do this once.)",
+                        "AssetRipper is not installed. Download ~120 MB from GitHub?\n\n(You only need to do this once.)",
                         "Download", "Cancel"))
                 {
-                    _status = "AssetRipper is required for extraction. Download cancelled.";
-                    return;
+                    _status = "AssetRipper is required. Download cancelled.";
+                    yield break;
                 }
+
                 _status = "Downloading AssetRipper...";
-                Repaint();
-                EditorApplication.delayCall += () => DownloadAndExtract();
-                return;
-            }
+                yield return null;
 
-            DoExtract();
-        }
-
-        private void DoExtract()
-        {
-            // Clean or create exports dir
-            PrepareExportDir();
-
-            _busy = true;
-            _status = "Starting AssetRipper...";
-
-            EditorApplication.delayCall += () =>
-            {
-                try { RunAssetRipper(); }
-                catch (Exception ex)
-                {
-                    _status = $"AssetRipper failed: {ex.Message}";
-                    _busy = false;
-                    Repaint();
-                }
-            };
-        }
-
-        private void DownloadAndExtract()
-        {
-            try
-            {
                 var zipPath = Path.Combine(AssetRipperDir, "AssetRipper_win_x64.zip");
+                if (!Directory.Exists(AssetRipperDir))
+                    Directory.CreateDirectory(AssetRipperDir);
 
-                // Download
-                _status = "Downloading AssetRipper...";
-                Repaint();
-
-                using (var client = new System.Net.WebClient())
+                using (var req = UnityWebRequest.Get(DownloadUrl))
                 {
-                    client.DownloadFile(DownloadUrl, zipPath);
+                    var dh = new DownloadHandlerFile(zipPath);
+                    dh.removeFileOnAbort = true;
+                    req.downloadHandler = dh;
+                    var op = req.SendWebRequest();
+                    while (!op.isDone) yield return null;
+
+                    if (req.result != UnityWebRequest.Result.Success)
+                    {
+                        _status = $"Download failed: {req.error}";
+                        yield break;
+                    }
                 }
 
-                if (!File.Exists(zipPath) || new FileInfo(zipPath).Length == 0)
-                {
-                    _status = "Download failed — file is empty or missing.";
-                    Repaint();
-                    return;
-                }
-
-                // Extract
                 _status = "Extracting AssetRipper...";
-                Repaint();
+                yield return null;
 
                 ZipFile.ExtractToDirectory(zipPath, AssetRipperDir, true);
-
-                // Clean up zip
                 File.Delete(zipPath);
 
                 if (!File.Exists(AssetRipperExe))
                 {
-                    _status = "Extraction complete but exe not found. Check the zip structure.";
-                    Repaint();
-                    return;
+                    _status = "Extraction complete but exe not found. Check zip structure.";
+                    yield break;
                 }
 
-                _status = "AssetRipper installed. Starting extraction...";
-                Repaint();
-                DoExtract();
+                _status = "AssetRipper installed.";
+                yield return null;
             }
-            catch (Exception e)
-            {
-                _status = $"Download/extract failed: {e.Message}";
-                Repaint();
-            }
-        }
 
-        private void PrepareExportDir()
-        {
-            if (!Directory.Exists(ExportsRoot))
-                Directory.CreateDirectory(ExportsRoot);
-
-            var timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
-            _currentExportDir = Path.Combine(ExportsRoot, timestamp);
-            Directory.CreateDirectory(_currentExportDir);
-        }
-
-        private void RunAssetRipper()
-        {
-            // Find a free port
-            int port = FindFreePort();
+            // ── Launch AssetRipper ──
+            int port = 51337;
+            _status = "Starting AssetRipper server...";
+            yield return null;
 
             var psi = new ProcessStartInfo
             {
@@ -295,130 +286,98 @@ namespace Cocokoishi.VRCALoader
             using var proc = Process.Start(psi);
             if (proc == null)
             {
-                _status = "Failed to start AssetRipper process.";
-                _busy = false;
-                Repaint();
-                return;
+                _status = "Failed to start AssetRipper.";
+                yield break;
             }
 
-            // Wait for the server to come up
+            // ── Wait for server to come up ──
             var baseUrl = $"http://localhost:{port}";
-            if (!WaitForServer(baseUrl, 30))
+            _status = "Waiting for AssetRipper server...";
+            yield return null;
+
+            bool serverUp = false;
+            var deadline = Time.realtimeSinceStartup + 30f;
+            while (Time.realtimeSinceStartup < deadline)
             {
-                proc.Kill();
-                _status = "AssetRipper server didn't start within 30 seconds.";
-                _busy = false;
-                Repaint();
-                return;
-            }
-
-            _status = "AssetRipper server running. Loading bundle...";
-            Repaint();
-
-            // Load the bundle file
-            var loadOk = PostJson(baseUrl + "/api/load-file",
-                $"{{\"path\":\"{EscapeJson(_bundlePath)}\"}}");
-
-            if (!loadOk)
-            {
-                proc.Kill();
-                _status = "Failed to send load-file command.";
-                _busy = false;
-                Repaint();
-                return;
-            }
-
-            // Wait for file to load
-            System.Threading.Thread.Sleep(3000);
-
-            // Export
-            _status = "Exporting...";
-            Repaint();
-
-            var exportOk = PostJson(baseUrl + "/api/command/export",
-                $"{{\"exportPath\":\"{EscapeJson(_currentExportDir)}\",\"exportType\":0}}");
-
-            if (!exportOk)
-            {
-                // Try legacy endpoint
-                exportOk = PostJson(baseUrl + "/api/export",
-                    $"{{\"path\":\"{EscapeJson(_currentExportDir)}\"}}");
-            }
-
-            // Wait for export to complete
-            System.Threading.Thread.Sleep(5000);
-
-            // Kill the process
-            try { proc.Kill(); } catch { /* already exited */ }
-
-            // Post-process
-            _status = "Post-processing exported files...";
-            Repaint();
-            PostProcessExports();
-
-            // Scan
-            ScanExports();
-
-            _busy = false;
-            _status = "Extraction complete.";
-            Repaint();
-        }
-
-        private static bool WaitForServer(string url, int timeoutSec)
-        {
-            var sw = Stopwatch.StartNew();
-            while (sw.Elapsed.TotalSeconds < timeoutSec)
-            {
-                try
+                using (var req = UnityWebRequest.Get(baseUrl))
                 {
-                    using var req = UnityWebRequest.Get(url);
                     req.timeout = 2;
                     var op = req.SendWebRequest();
-                    // wait synchronously (we're on delayCall, not main thread)
-                    var start = Time.realtimeSinceStartup;
-                    while (!op.isDone && Time.realtimeSinceStartup - start < 3f)
-                        System.Threading.Thread.Sleep(100);
-
-                    if (req.result == UnityWebRequest.Result.Success)
-                        return true;
+                    while (!op.isDone && Time.realtimeSinceStartup < deadline) yield return null;
+                    if (req.result == UnityWebRequest.Result.Success) { serverUp = true; break; }
                 }
-                catch
-                {
-                    // not up yet
-                }
-                System.Threading.Thread.Sleep(500);
+                yield return new WaitForSecondsRealtime(0.5f);
             }
-            return false;
+
+            if (!serverUp)
+            {
+                try { proc.Kill(); } catch { }
+                _status = "AssetRipper server didn't start.";
+                yield break;
+            }
+
+            // ── Load bundle ──
+            _status = "Loading bundle into AssetRipper...";
+            yield return null;
+
+            yield return PostJsonRoutine(baseUrl + "/api/load-file",
+                $"{{\"path\":\"{EscapeJson(_bundlePath)}\"}}");
+
+            // Give AssetRipper time to load the file
+            yield return new WaitForSecondsRealtime(3f);
+
+            // ── Export ──
+            _status = "Exporting...";
+            yield return null;
+
+            yield return PostJsonRoutine(baseUrl + "/api/command/export",
+                $"{{\"exportPath\":\"{EscapeJson(_currentExportDir)}\",\"exportType\":0}}");
+
+            // Give AssetRipper time to export
+            yield return new WaitForSecondsRealtime(5f);
+
+            // ── Kill AssetRipper ──
+            try { proc.Kill(); } catch { }
+
+            // ── Post-process & scan ──
+            _status = "Post-processing...";
+            yield return null;
+            PostProcessExports();
+
+            _status = "Scanning for controllers...";
+            yield return null;
+            ScanExports();
+
+            _status = "Extraction complete.";
         }
 
-        private static bool PostJson(string url, string json)
+        private static IEnumerator PostJsonRoutine(string url, string json)
         {
-            try
-            {
-                using var req = new UnityWebRequest(url, "POST");
-                var body = Encoding.UTF8.GetBytes(json);
-                req.uploadHandler = new UploadHandlerRaw(body);
-                req.downloadHandler = new DownloadHandlerBuffer();
-                req.SetRequestHeader("Content-Type", "application/json");
-                req.timeout = 10;
+            using var req = new UnityWebRequest(url, "POST");
+            var body = Encoding.UTF8.GetBytes(json);
+            req.uploadHandler = new UploadHandlerRaw(body);
+            req.downloadHandler = new DownloadHandlerBuffer();
+            req.SetRequestHeader("Content-Type", "application/json");
+            req.timeout = 10;
 
-                var op = req.SendWebRequest();
-                var start = Time.realtimeSinceStartup;
-                while (!op.isDone && Time.realtimeSinceStartup - start < 12f)
-                    System.Threading.Thread.Sleep(100);
+            var op = req.SendWebRequest();
+            while (!op.isDone) yield return null;
 
-                bool ok = req.result == UnityWebRequest.Result.Success;
-                if (!ok)
-                    UnityEngine.Debug.Log($"[ControllerExtract] POST {url} → {req.responseCode} {req.error}");
-                else
-                    UnityEngine.Debug.Log($"[ControllerExtract] POST {url} → OK {req.downloadHandler.text}");
-                return ok;
-            }
-            catch (Exception e)
-            {
-                UnityEngine.Debug.LogWarning($"[ControllerExtract] POST {url} failed: {e.Message}");
-                return false;
-            }
+            if (req.result != UnityWebRequest.Result.Success)
+                UnityEngine.Debug.LogWarning($"[ControllerExtract] POST {url} → {req.responseCode} {req.error}");
+            else
+                UnityEngine.Debug.Log($"[ControllerExtract] POST {url} → OK");
+        }
+
+        private void PrepareExportDir()
+        {
+            if (!Directory.Exists(ExportsRoot))
+                Directory.CreateDirectory(ExportsRoot);
+
+            var baseName = Path.GetFileNameWithoutExtension(_bundlePath);
+            var timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
+            _currentExportDir = Path.Combine(ExportsRoot, $"{baseName}_{timestamp}");
+            Directory.CreateDirectory(_currentExportDir);
         }
 
         private void ScanExports()
@@ -451,20 +410,25 @@ namespace Cocokoishi.VRCALoader
         {
             if (string.IsNullOrEmpty(_currentExportDir) || !Directory.Exists(_currentExportDir)) return;
 
-            RenameExtension(_currentExportDir, "*.shader");
-            RenameExtension(_currentExportDir, "*.cs");
-            RenameExtension(_currentExportDir, "*.cginc");
-            RenameExtension(_currentExportDir, "*.hlsl");
+            // Rename Shader/ folder → .Shader so Unity ignores it
+            RenameDir(_currentExportDir, "Shader", ".Shader");
+            RenameDir(_currentExportDir, "shader", ".shader");
+
+            // Rename Scripts/ folder → .Scripts so Unity ignores it
+            RenameDir(_currentExportDir, "Scripts", ".Scripts");
+            RenameDir(_currentExportDir, "scripts", ".scripts");
 
             AssetDatabase.Refresh();
         }
 
-        private static void RenameExtension(string dir, string pattern)
+        private static void RenameDir(string root, string name, string newName)
         {
-            foreach (var f in Directory.GetFiles(dir, pattern, SearchOption.AllDirectories))
+            foreach (var d in Directory.GetDirectories(root, name, SearchOption.AllDirectories))
             {
-                if (f.EndsWith(".txt")) continue;
-                File.Move(f, f + ".txt");
+                var parent = Path.GetDirectoryName(d);
+                var target = Path.Combine(parent, newName);
+                if (!Directory.Exists(target))
+                    Directory.Move(d, target);
             }
         }
 
@@ -489,11 +453,6 @@ namespace Cocokoishi.VRCALoader
             return s.Replace("\\", "\\\\").Replace("\"", "\\\"");
         }
 
-        private static int FindFreePort()
-        {
-            // Just use a high port — AssetRipper will pick one if this is taken
-            return 51337;
-        }
     }
 }
 #endif
