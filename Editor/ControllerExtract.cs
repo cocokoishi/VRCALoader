@@ -308,6 +308,9 @@ namespace Cocokoishi.VRCALoader
 
                 if (!File.Exists(AssetRipperExe))
                 { _status = "Extraction complete but exe not found."; yield break; }
+
+                _status = "AssetRipper installed. Run start_assetripper.bat, then click Extract again.";
+                yield break;
             }
 
             // ── Check AssetRipper is running (user must start it manually) ──
@@ -336,8 +339,7 @@ namespace Cocokoishi.VRCALoader
 
             if (!alive)
             {
-                var batPath = Path.Combine(AssetRipperDir, "startsh/start_assetripper.bat");
-                _status = $"AssetRipper is not running.\n\nPlease run:\n{batPath}\n\nthen click Extract again.";
+                _status = "AssetRipper is not running. Click \"Reveal start_assetripper.bat\", double-click it, then come back and click Extract again.";
                 yield break;
             }
 
