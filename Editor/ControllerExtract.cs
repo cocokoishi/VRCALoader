@@ -72,13 +72,6 @@ namespace Cocokoishi.VRCALoader
             _busy = false;
         }
 
-        private void OnDisable()
-        {
-            EditorApplication.update -= Pump;
-            _routine = null;
-            _busy = false;
-        }
-
         // ── GUI ────────────────────────────────────────────
 
         private void OnGUI()
@@ -122,8 +115,14 @@ namespace Cocokoishi.VRCALoader
             // ── Actions ──
             EditorGUILayout.Space(4);
             EditorGUILayout.BeginHorizontal();
-            GUI.enabled = !_busy && File.Exists(_bundlePath);
-            if (GUILayout.Button("Extract Bundle", GUILayout.Height(28))) StartExtract();
+
+            bool canExtract = !_busy && !string.IsNullOrEmpty(_bundlePath) && File.Exists(_bundlePath);
+            var extractLabel = _busy ? "Working..." :
+                string.IsNullOrEmpty(_bundlePath) ? "No bundle selected" :
+                !File.Exists(_bundlePath) ? "File not found" : "Extract Bundle";
+
+            GUI.enabled = canExtract;
+            if (GUILayout.Button(extractLabel, GUILayout.Height(28))) StartExtract();
             GUI.enabled = true;
             if (GUILayout.Button("Refresh List", GUILayout.Height(28))) RefreshExtractions();
             EditorGUILayout.EndHorizontal();
