@@ -190,9 +190,12 @@ namespace Cocokoishi.VRCALoader
 
         private void PumpExtract()
         {
-            if (_extractRoutine == null)
+            // Guard against domain reload / editor shutdown
+            if (_extractRoutine == null || !this)
             {
                 EditorApplication.update -= PumpExtract;
+                _extractRoutine = null;
+                _busy = false;
                 return;
             }
 
@@ -263,110 +266,30 @@ namespace Cocokoishi.VRCALoader
                     _status = "Extraction complete but exe not found. Check zip structure.";
                     yield break;
                 }
-
-                _status = "AssetRipper installed.";
-                yield return null;
             }
 
-            // ── Launch AssetRipper ──
+            // ── Launch AssetRipper (web-based, user must export manually) ──
             int port = 51337;
-            _status = "Starting AssetRipper server...";
+            _status = "Launching AssetRipper...";
             yield return null;
 
             var psi = new ProcessStartInfo
             {
                 FileName = AssetRipperExe,
                 Arguments = $"--headless true --port {port}",
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true,
+                UseShellExecute = true,
             };
 
-            using var proc = Process.Start(psi);
-            if (proc == null)
-            {
-                _status = "Failed to start AssetRipper.";
-                yield break;
-            }
+            Process.Start(psi);
 
-            // ── Wait for server to come up ──
-            var baseUrl = $"http://localhost:{port}";
-            _status = "Waiting for AssetRipper server...";
-            yield return null;
+            // Give it a moment then open browser
+            yield return new WaitForSecondsRealtime(2f);
+            Application.OpenURL($"http://localhost:{port}");
 
-            bool serverUp = false;
-            var deadline = Time.realtimeSinceStartup + 30f;
-            while (Time.realtimeSinceStartup < deadline)
-            {
-                using (var req = UnityWebRequest.Get(baseUrl))
-                {
-                    req.timeout = 2;
-                    var op = req.SendWebRequest();
-                    while (!op.isDone && Time.realtimeSinceStartup < deadline) yield return null;
-                    if (req.result == UnityWebRequest.Result.Success) { serverUp = true; break; }
-                }
-                yield return new WaitForSecondsRealtime(0.5f);
-            }
-
-            if (!serverUp)
-            {
-                try { proc.Kill(); } catch { }
-                _status = "AssetRipper server didn't start.";
-                yield break;
-            }
-
-            // ── Load bundle ──
-            _status = "Loading bundle into AssetRipper...";
-            yield return null;
-
-            yield return PostJsonRoutine(baseUrl + "/api/load-file",
-                $"{{\"path\":\"{EscapeJson(_bundlePath)}\"}}");
-
-            // Give AssetRipper time to load the file
-            yield return new WaitForSecondsRealtime(3f);
-
-            // ── Export ──
-            _status = "Exporting...";
-            yield return null;
-
-            yield return PostJsonRoutine(baseUrl + "/api/command/export",
-                $"{{\"exportPath\":\"{EscapeJson(_currentExportDir)}\",\"exportType\":0}}");
-
-            // Give AssetRipper time to export
-            yield return new WaitForSecondsRealtime(5f);
-
-            // ── Kill AssetRipper ──
-            try { proc.Kill(); } catch { }
-
-            // ── Post-process & scan ──
-            _status = "Post-processing...";
-            yield return null;
-            PostProcessExports();
-
-            _status = "Scanning for controllers...";
-            yield return null;
-            ScanExports();
-
-            _status = "Extraction complete.";
-        }
-
-        private static IEnumerator PostJsonRoutine(string url, string json)
-        {
-            using var req = new UnityWebRequest(url, "POST");
-            var body = Encoding.UTF8.GetBytes(json);
-            req.uploadHandler = new UploadHandlerRaw(body);
-            req.downloadHandler = new DownloadHandlerBuffer();
-            req.SetRequestHeader("Content-Type", "application/json");
-            req.timeout = 10;
-
-            var op = req.SendWebRequest();
-            while (!op.isDone) yield return null;
-
-            if (req.result != UnityWebRequest.Result.Success)
-                UnityEngine.Debug.LogWarning($"[ControllerExtract] POST {url} → {req.responseCode} {req.error}");
-            else
-                UnityEngine.Debug.Log($"[ControllerExtract] POST {url} → OK");
+            _status = "AssetRipper opened in browser. Drag the bundle file into it,\n" +
+                       $"set export path to:\n{_currentExportDir}\n" +
+                       "then click Export. Come back here and click 'Scan' when done.";
+            yield break;
         }
 
         private void PrepareExportDir()
@@ -447,11 +370,6 @@ namespace Cocokoishi.VRCALoader
         }
 
         // ── Helpers ───────────────────────────────────────
-
-        private static string EscapeJson(string s)
-        {
-            return s.Replace("\\", "\\\\").Replace("\"", "\\\"");
-        }
 
     }
 }
