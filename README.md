@@ -1,21 +1,21 @@
-This is a tool that allows you to load VRCA/VRCW files directly into the Unity Editor!
+Load VRCA/VRCW AssetBundle files directly into the Unity Editor for avatar inspection and recovery.
 
-> **Warning:** This tool is to help you recover your own avatars!
+> **Warning:** This tool is meant for recovering your own avatars only.
 
-### 1. How to install and use?
-Put it into your project's `Assets/VRCALoader/Editor/` directory. Then use it from Tools > VRCALoader. After selecting your vrca, load and double click spawn to spawn it into the hierarchy and scene.
+### 1. Installation & Usage
+Place the package under `Assets/VRCALoader/` in your project, then open it via **Tools > VRCALoader**. Select a `.vrca` or `.vrcw` file in a slot, click **Load**, then double-click any asset or click **Spawn** to instantiate it into the scene.
 
-### 2. How does it work?
-The Unity Editor can use a script to call the AssetBundle.LoadFromFileAsync AssetBundle.LoadAllAssetsAsync PrefabUtility.InstantiatePrefab/Instantiate functions, which directly loads a VRCA assetbundle file into the current scene without needing the actual project files at all.
+### 2. How It Works
+The tool calls `AssetBundle.LoadFromFileAsync`, `LoadAllAssetsAsync`, and `Object.Instantiate` to load a bundle straight into memory and place its contents in the current scene — no original project files required.
 
-### 3. What can this be used for?
-It can be used for a lot of things!
+### 3. Use Cases
 
-* **3.1 Recovering from Local build:** If you've lost your avatar's project files but haven't cleared your cache, you can find your avatar's local assetbundle file (the VRCA) at `C:\Users\**YourUsername**\AppData\LocalLow\VRChat\VRChat\Avatars`. Using this tool, you can load it directly into the current scene to help you recover your facial blendshape values, shader parameters, and more. Since this data is saved on memory, it is transient and cannot be stored or re-uploaded directly. Your best bet is to use the loaded data as a guide and manually recreate your work. You can use [unity-blendshape-to-json](https://github.com/cocokoishi/unity-blendshape-to-json) to migrate your blendshape data in a simple way.
-* **3.2 Recovering from the Cloud:** If your local avatar files are completely gone, I recommend using [https://github.com/200Tigersbloxed/dVRC](https://github.com/200Tigersbloxed/dVRC). It uses VRChat-permitted APIs to re-download your cloud-uploaded VRCA package and can also load it directly into the scene.
+* **3.1 Recovering a local build** — If you lost your project files but still have the cached VRCA, find it under `C:\Users\<YourUsername>\AppData\LocalLow\VRChat\VRChat\Avatars` and load it with this tool. You can inspect blendshape values, shader parameters, and more. The loaded data lives in memory only and cannot be re-uploaded; use it as a reference to manually recreate your work. [unity-blendshape-to-json](https://github.com/cocokoishi/unity-blendshape-to-json) can help migrate blendshape data.
+* **3.2 Recovering from the cloud** — If local files are gone, use [dVRC](https://github.com/200Tigersbloxed/dVRC) to re-download your cloud-uploaded VRCA via VRChat's permitted APIs, then load it here.
+
+### 4. Controller Extract
+AnimatorControllers inside a VRCA bundle are stripped of editor-layer data and state-graph layout information, so Unity's Animator window cannot open them. The **Controller Extract** window (opened from the VRCALoader footer) works around this by driving [AssetRipper](https://github.com/AssetRipper/AssetRipper) to unpack the bundle and produce readable `.controller` files. AssetRipper is auto-downloaded on first use.
 
 ---
 
-**Reference Project:**
-[https://github.com/200Tigersbloxed/dVRC](https://github.com/200Tigersbloxed/dVRC)
-A huge thanks to this project for providing the method! This script is a streamlined adaptation of that project, designed specifically for the lightweight loading of locally downloaded assetbundles. 
+Credit to [dVRC](https://github.com/200Tigersbloxed/dVRC) for the original AssetBundle loading approach which inspired this project.
