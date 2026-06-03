@@ -31,7 +31,7 @@ namespace Cocokoishi.VRCALoader
         private Vector2 _scroll;
         private string _status = "";
         private bool _busy;
-        private bool _stripNonControllers = true;
+        private bool _stripNonControllers;
         private IEnumerator _routine;
 
         private readonly List<Extraction> _extractions = new List<Extraction>();
@@ -62,11 +62,13 @@ namespace Cocokoishi.VRCALoader
             _bundlePath = EditorPrefs.GetString("ControllerExtract_LastBundle", "");
             if (!string.IsNullOrEmpty(_bundlePath) && !File.Exists(_bundlePath))
                 _bundlePath = "";
+            _stripNonControllers = EditorPrefs.GetBool("ControllerExtract_Strip", false);
         }
 
         private void OnDisable()
         {
             EditorPrefs.SetString("ControllerExtract_LastBundle", _bundlePath ?? "");
+            EditorPrefs.SetBool("ControllerExtract_Strip", _stripNonControllers);
             EditorApplication.update -= Pump;
             _routine = null;
             _busy = false;
@@ -80,9 +82,12 @@ namespace Cocokoishi.VRCALoader
             EditorGUILayout.LabelField("AssetRipper Controller Extraction", EditorStyles.boldLabel);
 
             // ── Options ──
+            var prevStrip = _stripNonControllers;
             _stripNonControllers = EditorGUILayout.ToggleLeft(
                 "After export, delete all folders except AnimatorController",
                 _stripNonControllers);
+            if (_stripNonControllers != prevStrip)
+                EditorPrefs.SetBool("ControllerExtract_Strip", _stripNonControllers);
 
             EditorGUILayout.Space(4);
 
