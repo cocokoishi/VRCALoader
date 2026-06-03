@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Text;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Networking;
@@ -115,12 +116,8 @@ namespace Cocokoishi.VRCALoader
             EditorGUILayout.EndHorizontal();
 
             var batPath = Path.Combine(AssetRipperDir, "startsh/start_assetripper.bat");
-            EditorGUILayout.BeginHorizontal();
             if (GUILayout.Button("Reveal start_assetripper.bat", EditorStyles.miniButton))
                 EditorUtility.RevealInFinder(batPath);
-            if (GUILayout.Button("Debug: Fetch Swagger", EditorStyles.miniButton))
-                StartDebugSwagger();
-            EditorGUILayout.EndHorizontal();
 
             if (_busy)
             {
@@ -380,46 +377,6 @@ namespace Cocokoishi.VRCALoader
         }
 
         // ── Helpers ────────────────────────────────────────
-
-        private void StartDebugSwagger()
-        {
-            if (_busy) return;
-            _busy = true;
-            _status = "Fetching Swagger...";
-            _routine = DebugSwaggerRoutine();
-            EditorApplication.update += Pump;
-            Repaint();
-        }
-
-        private IEnumerator DebugSwaggerRoutine()
-        {
-            var baseUrl = $"http://localhost:{RipPort}";
-            using (var req = UnityWebRequest.Get(baseUrl + "/swagger/v1/swagger.json"))
-            {
-                req.timeout = 10;
-                var op = req.SendWebRequest();
-                while (!op.isDone) yield return null;
-                if (req.result == UnityWebRequest.Result.Success)
-                    UnityEngine.Debug.Log($"[ControllerExtract] Swagger:\n{req.downloadHandler.text}");
-                else
-                {
-                    // Try alternate swagger paths
-                    using var req2 = UnityWebRequest.Get(baseUrl + "/swagger");
-                    req2.timeout = 5;
-                    var op2 = req2.SendWebRequest();
-                    while (!op2.isDone) yield return null;
-                    if (req2.result == UnityWebRequest.Result.Success)
-                        UnityEngine.Debug.Log($"[ControllerExtract] Swagger page available at {baseUrl}/swagger");
-                    else
-                        UnityEngine.Debug.LogError($"[ControllerExtract] Swagger not found. Tried:\n" +
-                            $"{baseUrl}/swagger/v1/swagger.json → {req.responseCode}\n" +
-                            $"{baseUrl}/swagger → {req2.responseCode}");
-                }
-            }
-            _status = "Swagger fetched — check Console.";
-            _busy = false;
-            yield break;
-        }
 
         private void PrepareExportDir()
         {
