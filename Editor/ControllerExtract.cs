@@ -91,8 +91,16 @@ namespace Cocokoishi.VRCALoader
                 ? BundlePaths.Select(p => Path.GetFileName(p)).ToArray()
                 : new[] { "(open VRCALoader first)" };
 
-            if (_selectedIndex < 0 || _selectedIndex >= BundlePaths.Length)
-                _selectedIndex = BundlePaths.Length > 0 ? 0 : -1;
+            if (_selectedIndex < 0)
+            {
+                // Try matching EditorPrefs-restored path
+                if (!string.IsNullOrEmpty(_bundlePath) && BundlePaths.Length > 0)
+                    _selectedIndex = Array.IndexOf(BundlePaths, _bundlePath);
+                if (_selectedIndex < 0 && BundlePaths.Length > 0)
+                    _selectedIndex = 0;
+            }
+            if (_selectedIndex >= 0 && _selectedIndex < BundlePaths.Length)
+                _bundlePath = BundlePaths[_selectedIndex];
 
             EditorGUILayout.BeginHorizontal();
             var newIdx = EditorGUILayout.Popup("Slot", _selectedIndex, slotNames);

@@ -190,7 +190,7 @@ namespace Cocokoishi.VRCALoader
                 if (asset is GameObject go)
                 {
                     StripPipelineManager(go);
-                    if (!Application.isPlaying) PatchEmptyControllers(go);
+                    PatchEmptyControllers(go);
                 }
 #endif
             }
@@ -231,7 +231,7 @@ namespace Cocokoishi.VRCALoader
             instance.transform.position = Vector3.zero;
 #if VRC_SDK_VRCSDK3
             StripPipelineManager(instance);
-            if (!Application.isPlaying) PatchEmptyControllers(instance);
+            PatchEmptyControllers(instance);
 #endif
             Undo.RegisterCreatedObjectUndo(instance, "Spawn from Bundle");
             Selection.activeGameObject = instance;
