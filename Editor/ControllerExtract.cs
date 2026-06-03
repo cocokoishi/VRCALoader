@@ -309,6 +309,15 @@ namespace Cocokoishi.VRCALoader
                 if (!File.Exists(AssetRipperExe))
                 { _status = "Extraction complete but exe not found."; yield break; }
 
+                // Auto-generate the start script
+                var startshDir = Path.Combine(AssetRipperDir, "startsh");
+                if (!Directory.Exists(startshDir)) Directory.CreateDirectory(startshDir);
+                File.WriteAllText(Path.Combine(startshDir, "start_assetripper.bat"),
+                    "@echo off\r\ncd /d \"%~dp0..\"\r\n" +
+                    "echo AssetRipper on http://localhost:6969\r\n" +
+                    "echo Close this window to stop.\r\n" +
+                    "AssetRipper.GUI.Free.exe --port 6969\r\n");
+
                 _status = "AssetRipper installed. Run start_assetripper.bat, then click Extract again.";
                 yield break;
             }
