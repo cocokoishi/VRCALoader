@@ -460,8 +460,8 @@ namespace Cocokoishi.VRCALoader
         private void DrawFooter()
         {
             EditorGUILayout.Space(4);
-            if (GUILayout.Button("Controller Inspector  ▾", GUILayout.Height(22)))
-                AvatarControllerProxy.Open();
+            if (GUILayout.Button("Controller Extract  ▾", GUILayout.Height(22)))
+                ControllerExtract.Open();
             EditorGUILayout.BeginHorizontal(EditorStyles.toolbar);
             EditorGUI.BeginChangeCheck();
             EditorGUILayout.LabelField("Slots", GUILayout.Width(32));
