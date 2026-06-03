@@ -231,7 +231,6 @@ namespace Cocokoishi.VRCALoader
             if (_busy) return;
             if (!File.Exists(_bundlePath)) { _status = "Bundle file not found."; return; }
 
-            PrepareExportDir();
             _busy = true;
             AssetDatabase.DisallowAutoRefresh();
             _routine = ExtractRoutine();
@@ -353,6 +352,7 @@ namespace Cocokoishi.VRCALoader
             }
 
             // ── Load bundle ──
+            PrepareExportDir();
             _status = "Loading bundle into AssetRipper...";
             yield return null;
 
