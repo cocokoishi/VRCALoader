@@ -115,8 +115,12 @@ namespace Cocokoishi.VRCALoader
             EditorGUILayout.EndHorizontal();
 
             var batPath = Path.Combine(AssetRipperDir, "startsh/start_assetripper.bat");
+            EditorGUILayout.BeginHorizontal();
             if (GUILayout.Button("Reveal start_assetripper.bat", EditorStyles.miniButton))
                 EditorUtility.RevealInFinder(batPath);
+            if (GUILayout.Button("Debug: Fetch Swagger", EditorStyles.miniButton))
+                StartDebugSwagger();
+            EditorGUILayout.EndHorizontal();
 
             if (_busy)
             {
@@ -328,7 +332,7 @@ namespace Cocokoishi.VRCALoader
                     UnityEngine.Debug.LogError($"[ControllerExtract] LoadFile {req.responseCode}: {req.downloadHandler?.text}");
                     yield break;
                 }
-                UnityEngine.Debug.Log($"[ControllerExtract] LoadFile OK");
+                UnityEngine.Debug.Log($"[ControllerExtract] LoadFile OK\n{req.downloadHandler?.text}");
             }
 
             _status = "Bundle loaded. Exporting...";
@@ -348,7 +352,7 @@ namespace Cocokoishi.VRCALoader
                     UnityEngine.Debug.LogError($"[ControllerExtract] Export {req.responseCode}: {req.downloadHandler?.text}");
                     yield break;
                 }
-                UnityEngine.Debug.Log($"[ControllerExtract] Export OK");
+                UnityEngine.Debug.Log($"[ControllerExtract] Export OK\n{req.downloadHandler?.text}");
             }
 
             // ── Strip non-controller folders if requested ──
@@ -373,6 +377,46 @@ namespace Cocokoishi.VRCALoader
         }
 
         // ── Helpers ────────────────────────────────────────
+
+        private void StartDebugSwagger()
+        {
+            if (_busy) return;
+            _busy = true;
+            _status = "Fetching Swagger...";
+            _routine = DebugSwaggerRoutine();
+            EditorApplication.update += Pump;
+            Repaint();
+        }
+
+        private IEnumerator DebugSwaggerRoutine()
+        {
+            var baseUrl = $"http://localhost:{RipPort}";
+            using (var req = UnityWebRequest.Get(baseUrl + "/swagger/v1/swagger.json"))
+            {
+                req.timeout = 10;
+                var op = req.SendWebRequest();
+                while (!op.isDone) yield return null;
+                if (req.result == UnityWebRequest.Result.Success)
+                    UnityEngine.Debug.Log($"[ControllerExtract] Swagger:\n{req.downloadHandler.text}");
+                else
+                {
+                    // Try alternate swagger paths
+                    using var req2 = UnityWebRequest.Get(baseUrl + "/swagger");
+                    req2.timeout = 5;
+                    var op2 = req2.SendWebRequest();
+                    while (!op2.isDone) yield return null;
+                    if (req2.result == UnityWebRequest.Result.Success)
+                        UnityEngine.Debug.Log($"[ControllerExtract] Swagger page available at {baseUrl}/swagger");
+                    else
+                        UnityEngine.Debug.LogError($"[ControllerExtract] Swagger not found. Tried:\n" +
+                            $"{baseUrl}/swagger/v1/swagger.json → {req.responseCode}\n" +
+                            $"{baseUrl}/swagger → {req2.responseCode}");
+                }
+            }
+            _status = "Swagger fetched — check Console.";
+            _busy = false;
+            yield break;
+        }
 
         private void PrepareExportDir()
         {
