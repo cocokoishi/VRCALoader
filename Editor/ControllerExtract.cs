@@ -59,6 +59,17 @@ namespace Cocokoishi.VRCALoader
         private void OnEnable()
         {
             RefreshExtractions();
+            _bundlePath = EditorPrefs.GetString("ControllerExtract_LastBundle", "");
+            if (!string.IsNullOrEmpty(_bundlePath) && !File.Exists(_bundlePath))
+                _bundlePath = "";
+        }
+
+        private void OnDisable()
+        {
+            EditorPrefs.SetString("ControllerExtract_LastBundle", _bundlePath ?? "");
+            EditorApplication.update -= Pump;
+            _routine = null;
+            _busy = false;
         }
 
         private void OnDisable()
@@ -83,20 +94,16 @@ namespace Cocokoishi.VRCALoader
             EditorGUILayout.Space(4);
 
             // ── Source ──
-            EditorGUILayout.LabelField("Bundle from VRCALoader Slots", EditorStyles.miniLabel);
-            EditorGUILayout.BeginHorizontal();
-            var names = BundlePaths.Length > 0
+            var slotNames = BundlePaths.Length > 0
                 ? BundlePaths.Select(p => Path.GetFileName(p)).ToArray()
-                : new[] { "(no slots — use Browse)" };
+                : new[] { "(open VRCALoader first)" };
 
             if (_selectedIndex < 0 || _selectedIndex >= BundlePaths.Length)
-            {
                 _selectedIndex = BundlePaths.Length > 0 ? 0 : -1;
-                if (_selectedIndex >= 0) _bundlePath = BundlePaths[_selectedIndex];
-            }
 
-            var newIdx = EditorGUILayout.Popup("Source", _selectedIndex, names);
-            if (newIdx != _selectedIndex && newIdx < BundlePaths.Length)
+            EditorGUILayout.BeginHorizontal();
+            var newIdx = EditorGUILayout.Popup("Slot", _selectedIndex, slotNames);
+            if (newIdx != _selectedIndex && newIdx >= 0 && newIdx < BundlePaths.Length)
             { _selectedIndex = newIdx; _bundlePath = BundlePaths[_selectedIndex]; }
 
             if (GUILayout.Button("Browse", GUILayout.Width(64)))
@@ -105,6 +112,12 @@ namespace Cocokoishi.VRCALoader
                 if (!string.IsNullOrEmpty(p)) { _bundlePath = p; _selectedIndex = -1; }
             }
             EditorGUILayout.EndHorizontal();
+
+            // Show current path (persists across domain reloads)
+            if (!string.IsNullOrEmpty(_bundlePath))
+                EditorGUILayout.LabelField(Path.GetFileName(_bundlePath), EditorStyles.miniLabel);
+            else if (BundlePaths.Length == 0)
+                EditorGUILayout.LabelField("Open VRCALoader first, or use Browse", EditorStyles.centeredGreyMiniLabel);
 
             // ── Actions ──
             EditorGUILayout.Space(4);
@@ -153,10 +166,12 @@ namespace Cocokoishi.VRCALoader
                         if (EditorUtility.DisplayDialog("Delete Extraction",
                                 $"Delete {ex.folderName}?", "Delete", "Cancel"))
                         {
-                            Directory.Delete(ex.fullPath, true);
+                            if (Directory.Exists(ex.fullPath)) Directory.Delete(ex.fullPath, true);
+                            var meta = ex.fullPath + ".meta";
+                            if (File.Exists(meta)) File.Delete(meta);
                             _extractions.Remove(ex);
                             AssetDatabase.Refresh();
-                            break; // collection modified
+                            break;
                         }
                     }
                     EditorGUILayout.EndHorizontal();
@@ -171,12 +186,13 @@ namespace Cocokoishi.VRCALoader
                             var relPath = "Assets" + c.filePath
                                 .Substring(Application.dataPath.Length)
                                 .Replace('\\', '/');
-                            AssetDatabase.ImportAsset(relPath, ImportAssetOptions.ForceUpdate);
-                            var asset = AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(relPath);
-                            if (asset != null)
-                                AssetDatabase.OpenAsset(asset);
-                            else
-                                EditorUtility.RevealInFinder(c.filePath);
+                            EditorApplication.delayCall += () =>
+                            {
+                                try { AssetDatabase.ImportAsset(relPath, ImportAssetOptions.ForceUpdate); } catch { }
+                                var asset = AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(relPath);
+                                if (asset != null) AssetDatabase.OpenAsset(asset);
+                                else EditorUtility.RevealInFinder(c.filePath);
+                            };
                         }
                         if (GUILayout.Button("Reveal", EditorStyles.miniButton, GUILayout.Width(48)))
                             EditorUtility.RevealInFinder(c.filePath);
@@ -355,18 +371,55 @@ namespace Cocokoishi.VRCALoader
                 }
             }
 
+            // ── Flatten: move ExportedProject/Assets/* up to export root ──
+            _status = "Flattening export structure...";
+            yield return null;
+
+            var exportedProject = Path.Combine(_currentExportDir, "ExportedProject");
+            var nestedAssets = Path.Combine(exportedProject, "Assets");
+            if (Directory.Exists(nestedAssets))
+            {
+                // Delete everything in export root EXCEPT ExportedProject
+                foreach (var f in Directory.GetFiles(_currentExportDir)) File.Delete(f);
+                foreach (var d in Directory.GetDirectories(_currentExportDir))
+                    if (d != exportedProject) Directory.Delete(d, true);
+
+                // Delete everything in ExportedProject EXCEPT Assets
+                foreach (var f in Directory.GetFiles(exportedProject)) File.Delete(f);
+                foreach (var d in Directory.GetDirectories(exportedProject))
+                    if (d != nestedAssets) Directory.Delete(d, true);
+
+                // Move Assets/* up to export root
+                foreach (var d in Directory.GetDirectories(nestedAssets))
+                    Directory.Move(d, Path.Combine(_currentExportDir, Path.GetFileName(d)));
+                foreach (var f in Directory.GetFiles(nestedAssets))
+                    File.Move(f, Path.Combine(_currentExportDir, Path.GetFileName(f)));
+
+                // Delete empty ExportedProject
+                Directory.Delete(exportedProject, true);
+            }
+
             // ── Strip non-controller folders if requested ──
             if (_stripNonControllers)
             {
                 _status = "Stripping non-controller assets...";
                 yield return null;
-                StripNonControllers(_currentExportDir);
+                foreach (var d in Directory.GetDirectories(_currentExportDir))
+                {
+                    var name = Path.GetFileName(d);
+                    if (name.Equals("AnimatorController", StringComparison.OrdinalIgnoreCase)) continue;
+                    try { Directory.Delete(d, true); }
+                    catch (Exception e) { UnityEngine.Debug.LogWarning($"[ControllerExtract] Could not delete {name}: {e.Message}"); }
+                }
             }
 
             // ── Rename Shader/Scripts folders ──
             _status = "Post-processing...";
             yield return null;
-            PostProcessExports();
+            RenameDir(_currentExportDir, "Shader", ".Shader");
+            RenameDir(_currentExportDir, "shader", ".shader");
+            RenameDir(_currentExportDir, "Scripts", ".Scripts");
+            RenameDir(_currentExportDir, "scripts", ".scripts");
 
             // ── Scan & refresh list ──
             _status = "Scanning...";
@@ -404,37 +457,6 @@ namespace Cocokoishi.VRCALoader
                     ex.controllers.Add(new ControllerEntry { filePath = f, fileName = Path.GetFileName(f) });
                 _extractions.Add(ex);
             }
-        }
-
-        private static void StripNonControllers(string exportDir)
-        {
-            // Find the Assets folder AssetRipper exported
-            var assetsDir = FindDir(exportDir, "Assets");
-            if (assetsDir == null) return;
-
-            foreach (var sub in Directory.GetDirectories(assetsDir))
-            {
-                var name = Path.GetFileName(sub);
-                if (name.Equals("AnimatorController", StringComparison.OrdinalIgnoreCase)) continue;
-                try { Directory.Delete(sub, true); }
-                catch (Exception e) { UnityEngine.Debug.LogWarning($"[ControllerExtract] Could not delete {name}: {e.Message}"); }
-            }
-        }
-
-        private static string FindDir(string root, string name)
-        {
-            foreach (var d in Directory.GetDirectories(root, name, SearchOption.AllDirectories))
-                return d;
-            return null;
-        }
-
-        private void PostProcessExports()
-        {
-            if (string.IsNullOrEmpty(_currentExportDir) || !Directory.Exists(_currentExportDir)) return;
-            RenameDir(_currentExportDir, "Shader", ".Shader");
-            RenameDir(_currentExportDir, "shader", ".shader");
-            RenameDir(_currentExportDir, "Scripts", ".Scripts");
-            RenameDir(_currentExportDir, "scripts", ".scripts");
         }
 
         private static void RenameDir(string root, string name, string newName)
