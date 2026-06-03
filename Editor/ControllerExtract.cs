@@ -174,11 +174,12 @@ namespace Cocokoishi.VRCALoader
                             var relPath = "Assets" + c.filePath
                                 .Substring(Application.dataPath.Length)
                                 .Replace('\\', '/');
+                            AssetDatabase.ImportAsset(relPath, ImportAssetOptions.ForceUpdate);
                             var asset = AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(relPath);
                             if (asset != null)
-                                { Selection.activeObject = asset; AssetDatabase.OpenAsset(asset); }
+                                AssetDatabase.OpenAsset(asset);
                             else
-                                EditorUtility.OpenWithDefaultApp(c.filePath);
+                                EditorUtility.RevealInFinder(c.filePath);
                         }
                         if (GUILayout.Button("Reveal", EditorStyles.miniButton, GUILayout.Width(48)))
                             EditorUtility.RevealInFinder(c.filePath);
@@ -320,19 +321,20 @@ namespace Cocokoishi.VRCALoader
             yield return null;
 
             {
-                var form = new WWWForm();
-                form.AddField("Path", _bundlePath);
-                using var req = UnityWebRequest.Post(baseUrl + "/LoadFile", form);
+                var body = "Path=" + Uri.EscapeDataString(_bundlePath);
+                using var req = new UnityWebRequest(baseUrl + "/LoadFile", "POST");
+                req.uploadHandler = new UploadHandlerRaw(Encoding.UTF8.GetBytes(body));
+                req.downloadHandler = new DownloadHandlerBuffer();
+                req.SetRequestHeader("Content-Type", "application/x-www-form-urlencoded");
                 req.timeout = 60;
                 var op = req.SendWebRequest();
                 while (!op.isDone) yield return null;
                 if (req.result != UnityWebRequest.Result.Success)
                 {
-                    _status = $"LoadFile failed: {req.responseCode} {req.error}";
+                    _status = $"LoadFile failed: {req.responseCode}";
                     UnityEngine.Debug.LogError($"[ControllerExtract] LoadFile {req.responseCode}: {req.downloadHandler?.text}");
                     yield break;
                 }
-                UnityEngine.Debug.Log($"[ControllerExtract] LoadFile OK\n{req.downloadHandler?.text}");
             }
 
             _status = "Bundle loaded. Exporting...";
@@ -340,19 +342,20 @@ namespace Cocokoishi.VRCALoader
 
             // ── Export ──
             {
-                var form = new WWWForm();
-                form.AddField("Path", _currentExportDir);
-                using var req = UnityWebRequest.Post(baseUrl + "/Export/UnityProject", form);
+                var body = "Path=" + Uri.EscapeDataString(_currentExportDir);
+                using var req = new UnityWebRequest(baseUrl + "/Export/UnityProject", "POST");
+                req.uploadHandler = new UploadHandlerRaw(Encoding.UTF8.GetBytes(body));
+                req.downloadHandler = new DownloadHandlerBuffer();
+                req.SetRequestHeader("Content-Type", "application/x-www-form-urlencoded");
                 req.timeout = 600;
                 var op = req.SendWebRequest();
                 while (!op.isDone) yield return null;
                 if (req.result != UnityWebRequest.Result.Success)
                 {
-                    _status = $"Export failed: {req.responseCode} {req.error}";
+                    _status = $"Export failed: {req.responseCode}";
                     UnityEngine.Debug.LogError($"[ControllerExtract] Export {req.responseCode}: {req.downloadHandler?.text}");
                     yield break;
                 }
-                UnityEngine.Debug.Log($"[ControllerExtract] Export OK\n{req.downloadHandler?.text}");
             }
 
             // ── Strip non-controller folders if requested ──
