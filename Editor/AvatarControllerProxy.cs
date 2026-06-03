@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 using UnityEditor;
 using UnityEditor.Animations;
 using UnityEngine;
@@ -21,25 +22,58 @@ namespace Cocokoishi.VRCALoader
 
         private sealed class Source
         {
-            public AnimatorController controller;
+            public RuntimeAnimatorController controller;
             public string owner;
             public string slot;
-
             public string Label => controller != null ? controller.name : "(null)";
 
-            public int TotalLayers => controller != null ? controller.layers.Length : 0;
-
-            // A layer is "real" only if it has a stateMachine.
-            // Bare stub layers (from the facs-style patch) have stateMachine == null.
-            public int ContentLayerCount
+            public int TotalLayers
             {
                 get
                 {
-                    if (controller == null || controller.layers.Length == 0) return 0;
-                    int n = 0;
-                    foreach (var l in controller.layers)
-                        if (l.stateMachine != null) n++;
-                    return n;
+                    if (controller == null) return 0;
+                    if (controller is AnimatorController ac && ac.layers.Length > 0)
+                        return ac.layers.Length;
+                    using var so = new SerializedObject(controller);
+                    // editor layers (may exist in serialized data even when public getter fails)
+                    var arr = so.FindProperty("m_AnimatorLayers");
+                    if (arr != null && arr.isArray && arr.arraySize > 0) return arr.arraySize;
+                    // runtime blob paths
+                    arr = so.FindProperty("m_Controller.m_LayerArray");
+                    if (arr != null && arr.isArray) return arr.arraySize;
+                    arr = so.FindProperty("m_LayerArray");
+                    return (arr != null && arr.isArray) ? arr.arraySize : 0;
+                }
+            }
+
+            public bool HasReadableData
+            {
+                get
+                {
+                    if (controller == null) return false;
+                    if (controller is AnimatorController ac && ac.layers.Length > 0)
+                    {
+                        foreach (var l in ac.layers)
+                            if (l.stateMachine != null && l.stateMachine.states.Length > 0)
+                                return true;
+                    }
+                    using var so = new SerializedObject(controller);
+                    // editor m_AnimatorLayers — often present even when public .layers is empty
+                    var layers = so.FindProperty("m_AnimatorLayers");
+                    if (layers != null && layers.isArray && layers.arraySize > 0)
+                    {
+                        for (int i = 0; i < layers.arraySize; i++)
+                        {
+                            var smRef = layers.GetArrayElementAtIndex(i)
+                                .FindPropertyRelative("m_StateMachine")?.objectReferenceValue;
+                            if (smRef is AnimatorStateMachine machine && machine.states.Length > 0)
+                                return true;
+                        }
+                    }
+                    // runtime blob paths
+                    return so.FindProperty("m_TOS")?.isArray == true
+                        || so.FindProperty("m_Controller.m_StateConstantArray")?.isArray == true
+                        || so.FindProperty("m_StateConstantArray")?.isArray == true;
                 }
             }
         }
@@ -57,8 +91,8 @@ namespace Cocokoishi.VRCALoader
             EditorGUILayout.Space(4);
             EditorGUILayout.LabelField("Readable Controller Proxy", EditorStyles.boldLabel);
             EditorGUILayout.LabelField(
-                "Generates a stand-alone copy of the selected controller with states laid out on a " +
-                "readable grid. The original bundle objects are never modified.",
+                "Rebuilds a fully readable AnimatorController from the underlying runtime data " +
+                "in a bundle-loaded controller. Original objects are never touched.",
                 EditorStyles.wordWrappedMiniLabel);
 
             EditorGUILayout.Space(4);
@@ -68,7 +102,6 @@ namespace Cocokoishi.VRCALoader
             if (EditorGUI.EndChangeCheck()) AddTarget(_target);
             if (GUILayout.Button("Scan Scene", GUILayout.Width(96))) Scan();
             EditorGUILayout.EndHorizontal();
-
             EditorGUILayout.Space(4);
 
             if (_sources.Count == 0)
@@ -83,9 +116,8 @@ namespace Cocokoishi.VRCALoader
                 _scroll = EditorGUILayout.BeginScrollView(_scroll);
                 foreach (var src in _sources) DrawSource(src);
                 EditorGUILayout.EndScrollView();
-
                 EditorGUILayout.Space(2);
-                var eligible = _sources.Count(s => s.ContentLayerCount > 0);
+                var eligible = _sources.Count(s => s.HasReadableData);
                 GUI.enabled = eligible > 0;
                 if (GUILayout.Button($"Generate All ({eligible} eligible)", GUILayout.Height(24)))
                     GenerateAll();
@@ -108,37 +140,32 @@ namespace Cocokoishi.VRCALoader
             EditorGUILayout.BeginVertical(GUI.skin.box);
             EditorGUILayout.BeginHorizontal();
 
-            var icon = AssetPreview.GetMiniThumbnail(src.controller)
-                       ?? AssetPreview.GetMiniTypeThumbnail(typeof(AnimatorController));
-            if (icon != null) GUILayout.Label(icon, GUILayout.Width(18), GUILayout.Height(18));
+            if (src.controller != null)
+            {
+                var icon = AssetPreview.GetMiniThumbnail(src.controller)
+                           ?? AssetPreview.GetMiniTypeThumbnail(typeof(RuntimeAnimatorController));
+                if (icon != null) GUILayout.Label(icon, GUILayout.Width(18), GUILayout.Height(18));
+            }
 
             EditorGUILayout.BeginVertical();
             EditorGUILayout.LabelField(src.Label, EditorStyles.boldLabel);
-
-            // Description line
             var ownerStr = string.IsNullOrEmpty(src.owner) ? "" : src.owner + " · ";
-            var layerInfo = src.TotalLayers == 0
-                ? "no layers"
-                : src.TotalLayers == 1 && src.ContentLayerCount == 0
-                    ? "1 stub layer (patched, no content)"
-                    : $"{src.ContentLayerCount} of {src.TotalLayers} layer(s) have content";
-            EditorGUILayout.LabelField($"{ownerStr}{src.slot}  —  {layerInfo}", EditorStyles.miniLabel);
+            var desc = src.TotalLayers == 0 ? "no layers found" : $"{src.TotalLayers} layer(s)";
+            if (!src.HasReadableData) desc += " — no reconstructable data";
+            EditorGUILayout.LabelField(ownerStr + src.slot + "  —  " + desc, EditorStyles.miniLabel);
             EditorGUILayout.EndVertical();
 
             GUILayout.FlexibleSpace();
 
-            if (src.ContentLayerCount == 0)
+            if (!src.HasReadableData)
             {
-                var oldColor = GUI.color;
+                var old = GUI.color;
                 GUI.color = new Color(0.5f, 0.5f, 0.5f);
                 GUILayout.Label("no\ndata", EditorStyles.centeredGreyMiniLabel, GUILayout.Width(36), GUILayout.Height(28));
-                GUI.color = oldColor;
+                GUI.color = old;
             }
-            else
-            {
-                if (GUILayout.Button("Generate", GUILayout.Width(74), GUILayout.Height(28)))
-                    Generate(src);
-            }
+            else if (GUILayout.Button("Generate", GUILayout.Width(74), GUILayout.Height(28)))
+                Generate(src);
 
             EditorGUILayout.EndHorizontal();
             EditorGUILayout.EndVertical();
@@ -149,7 +176,7 @@ namespace Cocokoishi.VRCALoader
         private void Scan()
         {
             _sources.Clear();
-            var seen = new HashSet<AnimatorController>();
+            var seen = new HashSet<RuntimeAnimatorController>();
 
             for (int s = 0; s < SceneManager.sceneCount; s++)
             {
@@ -159,21 +186,22 @@ namespace Cocokoishi.VRCALoader
                     Collect(root, seen);
             }
 
-            var withContent = _sources.Count(x => x.ContentLayerCount > 0);
+            var ok = _sources.Count(x => x.HasReadableData);
             _status = _sources.Count == 0
-                ? "Scan found no controllers. Spawn an avatar first."
-                : $"Found {_sources.Count} controller(s) — {withContent} with readable content.";
+                ? "Scan found no controllers."
+                : $"Found {_sources.Count} controller(s) — {ok} have readable data.";
         }
 
         private void AddTarget(UnityEngine.Object target)
         {
             if (target == null) return;
-            var seen = new HashSet<AnimatorController>(_sources.Select(x => x.controller));
+            var seen = new HashSet<RuntimeAnimatorController>(
+                _sources.Select(x => x.controller));
 
-            if (target is AnimatorController ac)
+            if (target is RuntimeAnimatorController rac)
             {
-                if (seen.Add(ac))
-                    _sources.Add(new Source { controller = ac, owner = ac.name, slot = "Controller" });
+                if (seen.Add(rac))
+                    _sources.Add(new Source { controller = rac, owner = rac.name, slot = "Controller" });
             }
             else if (target is GameObject go)
             {
@@ -182,33 +210,31 @@ namespace Cocokoishi.VRCALoader
             _target = null;
         }
 
-        private void Collect(GameObject root, HashSet<AnimatorController> seen)
+        private void Collect(GameObject root, HashSet<RuntimeAnimatorController> seen)
         {
 #if VRC_SDK_VRCSDK3
-            foreach (var descriptor in root.GetComponentsInChildren<VRC.SDK3.Avatars.Components.VRCAvatarDescriptor>(true))
+            foreach (var d in root.GetComponentsInChildren<VRC.SDK3.Avatars.Components.VRCAvatarDescriptor>(true))
             {
-                CollectLayers(descriptor.gameObject.name, descriptor.baseAnimationLayers, seen);
-                CollectLayers(descriptor.gameObject.name, descriptor.specialAnimationLayers, seen);
+                CollectLayers(d.gameObject.name, d.baseAnimationLayers, seen);
+                CollectLayers(d.gameObject.name, d.specialAnimationLayers, seen);
             }
 #endif
-            foreach (var animator in root.GetComponentsInChildren<Animator>(true))
-            {
-                if (animator.runtimeAnimatorController is AnimatorController ac && seen.Add(ac))
-                    _sources.Add(new Source { controller = ac, owner = animator.gameObject.name, slot = "Animator" });
-            }
+            foreach (var a in root.GetComponentsInChildren<Animator>(true))
+                if (a.runtimeAnimatorController != null && seen.Add(a.runtimeAnimatorController))
+                    _sources.Add(new Source { controller = a.runtimeAnimatorController, owner = a.gameObject.name, slot = "Animator" });
         }
 
 #if VRC_SDK_VRCSDK3
         private void CollectLayers(string owner,
             VRC.SDK3.Avatars.Components.VRCAvatarDescriptor.CustomAnimLayer[] layers,
-            HashSet<AnimatorController> seen)
+            HashSet<RuntimeAnimatorController> seen)
         {
             if (layers == null) return;
             foreach (var layer in layers)
             {
-                if (layer.isDefault) continue;
-                if (layer.animatorController is AnimatorController ac && seen.Add(ac))
-                    _sources.Add(new Source { controller = ac, owner = owner, slot = layer.type.ToString() });
+                if (layer.isDefault || layer.animatorController == null) continue;
+                if (seen.Add(layer.animatorController))
+                    _sources.Add(new Source { controller = layer.animatorController, owner = owner, slot = layer.type.ToString() });
             }
         }
 #endif
@@ -220,30 +246,22 @@ namespace Cocokoishi.VRCALoader
             int made = 0, skipped = 0;
             foreach (var src in _sources)
             {
-                if (src.ContentLayerCount == 0) { skipped++; continue; }
-                var r = Build(src);
-                if (r != null) made++;
+                if (!src.HasReadableData) { skipped++; continue; }
+                if (Build(src) != null) made++;
             }
-
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
-            _status = $"Done: {made} generated, {skipped} skipped (no content).";
+            _status = $"Done: {made} generated, {skipped} skipped.";
         }
 
         private void Generate(Source src)
         {
-            if (src.ContentLayerCount == 0)
-            {
-                _status = $"\"{src.Label}\" has no meaningful layer content.";
-                return;
-            }
-
+            if (!src.HasReadableData) { _status = $"\"{src.Label}\" has no reconstructable data."; return; }
             var proxy = Build(src);
             if (proxy == null) return;
-
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
-            _status = $"Generated proxy — {src.owner} / {src.slot} / {src.Label}.";
+            _status = $"Generated — {src.owner} / {src.slot} / {src.Label}.";
             Selection.activeObject = proxy;
             EditorGUIUtility.PingObject(proxy);
             AssetDatabase.OpenAsset(proxy);
@@ -254,21 +272,17 @@ namespace Cocokoishi.VRCALoader
             try
             {
                 EnsureFolder();
-
-                var ctrlName = string.IsNullOrEmpty(src.Label) ? "proxy" : Sanitize(src.Label);
-                var ownerName = string.IsNullOrEmpty(src.owner) ? "" : Sanitize(src.owner);
-                var slotName = string.IsNullOrEmpty(src.slot) ? "" : Sanitize(src.slot);
-                var fn = ownerName.Length > 0
-                    ? $"{ownerName}__{ctrlName}__{slotName}"
-                    : $"{ctrlName}__{slotName}";
-
+                var ctrl = Sanitize(src.Label);
+                var own = string.IsNullOrEmpty(src.owner) ? "" : Sanitize(src.owner);
+                var sl = string.IsNullOrEmpty(src.slot) ? "" : Sanitize(src.slot);
+                var fn = own.Length > 0 ? $"{own}__{ctrl}__{sl}" : $"{ctrl}__{sl}";
                 var path = AssetDatabase.GenerateUniqueAssetPath($"{ProxyFolder}/{fn}_proxy.controller");
                 return new ProxyBuilder().Build(src.controller, path);
             }
             catch (Exception e)
             {
                 _status = $"Generation failed: {e.Message}";
-                Debug.LogError($"[VRCALoader] Proxy failed for \"{src.Label}\": {e}");
+                Debug.LogError($"[VRCALoader] Proxy failed for \"{src.Label}\":\n{e}");
                 return null;
             }
         }
@@ -286,8 +300,8 @@ namespace Cocokoishi.VRCALoader
         private void RevealProxyFolder()
         {
             EnsureFolder();
-            var obj = AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(ProxyFolder);
-            if (obj != null) EditorGUIUtility.PingObject(obj);
+            var o = AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(ProxyFolder);
+            if (o) EditorGUIUtility.PingObject(o);
         }
 
         private void DeleteProxies()
@@ -297,260 +311,723 @@ namespace Cocokoishi.VRCALoader
                     $"Delete everything under {ProxyFolder}?", "Delete", "Cancel")) return;
             AssetDatabase.DeleteAsset(ProxyFolder);
             AssetDatabase.Refresh();
-            _status = "Deleted generated proxies.";
+            _status = "Deleted.";
         }
 
         private static string Sanitize(string raw)
         {
-            var clean = new string(raw.Select(c => char.IsLetterOrDigit(c) || c == '_' || c == '-' ? c : '_').ToArray());
-            return string.IsNullOrWhiteSpace(clean) ? "controller" : clean;
+            var c = new string(raw.Select(ch => char.IsLetterOrDigit(ch) || ch == '_' || ch == '-' ? ch : '_').ToArray());
+            return string.IsNullOrWhiteSpace(c) ? "controller" : c;
         }
 
-        // ── Proxy builder ──────────────────────────────────
+        // ═══════════════════════════════════════════════════════
+        // ProxyBuilder – runtime controller bytecode reconstructor
+        // ═══════════════════════════════════════════════════════
 
         private sealed class ProxyBuilder
         {
-            private const float ColStep = 300f;
-            private const float RowStep = 80f;
+            // ── layout constants ──────────────────────────
+            private const float ColStep = 280f;
+            private const float RowStep = 90f;
+            private const int MaxPerRow = 6;
             private static readonly Vector3 EntryPos = new(0, 0);
             private static readonly Vector3 AnyPos = new(0, 70);
             private static readonly Vector3 ExitPos = new(0, 140);
             private static readonly Vector3 ParentPos = new(0, 210);
-            private static readonly Vector3 StateOrigin = new(260, 0);
 
-            private AnimatorController _proxy;
-            private readonly Dictionary<AnimatorState, AnimatorState> _sm = new();
-            private readonly Dictionary<AnimatorStateMachine, AnimatorStateMachine> _mm = new();
-            private readonly Dictionary<Motion, Motion> _mo = new();
+            // ── state ─────────────────────────────────────
+            private AnimatorController _dst;
+            private RuntimeAnimatorController _src;
 
-            public AnimatorController Build(AnimatorController source, string path)
+            // hash → name
+            private Dictionary<uint, string> _tos;
+            // flat index → rebuilt BlendTree
+            private Dictionary<int, BlendTree> _blendMap;
+            // flat index → rebuilt AnimatorState
+            private Dictionary<int, AnimatorState> _stateMap;
+            // flat index → state machine (layer root)
+            private Dictionary<int, AnimatorStateMachine> _machineMap;
+            // AnimationClips from the source
+            private AnimationClip[] _clips;
+            // index → child motion info for blend trees
+            private Dictionary<int, ChildMotionData> _childMotionData;
+
+            private struct ChildMotionData
             {
-                // Try public API first; if empty, try SerializedObject fallback.
-                var srcLayers = source.layers;
-                if (srcLayers.Length == 0)
+                public int motionIndex; // positive = state/clip index, negative bit pattern = subtree
+                public float threshold;
+                public Vector2 position;
+                public float timeScale;
+            }
+
+            // ── entry point ───────────────────────────────
+
+            public AnimatorController Build(RuntimeAnimatorController source, string path)
+            {
+                _src = source;
+                _dst = AnimatorController.CreateAnimatorControllerAtPath(path);
+                _tos = new Dictionary<uint, string>();
+                _blendMap = new Dictionary<int, BlendTree>();
+                _stateMap = new Dictionary<int, AnimatorState>();
+                _machineMap = new Dictionary<int, AnimatorStateMachine>();
+                _childMotionData = new Dictionary<int, ChildMotionData>();
+
+                using var so = new SerializedObject(source);
+
+                // Step 1: TOS (hash → name dictionary)
+                ExtractTOS(so);
+
+                // Step 2: animation clips
+                ExtractClips(so);
+
+                // Step 3: parameters (needs TOS)
+                ExtractParameters(so);
+
+                // Step 4: layers (needs TOS)
+                int layerCount = ExtractLayers(so);
+
+                // Step 5: states within each layer (needs TOS, layers)
+                ExtractStates(so, layerCount);
+
+                // Step 6: blend trees (needs TOS, states, clips)
+                ExtractBlendTrees(so);
+
+                // Step 7: assign motions (needs blend trees + clips)
+                AssignMotions(so);
+
+                // Step 8: transitions (needs states, machines)
+                ExtractTransitions(so, layerCount);
+
+                // Remove the default layer that CreateAnimatorControllerAtPath made
+                while (_dst.layers.Length > layerCount)
+                    _dst.RemoveLayer(0);
+
+                return _dst;
+            }
+
+            // ── helpers ───────────────────────────────────
+
+            private static string ResolveName(Dictionary<uint, string> tos, uint hash)
+            {
+                if (hash == 0) return "";
+                return tos.TryGetValue(hash, out var n) ? n : $"#{hash:X8}";
+            }
+
+            private static Vector3 GridPos(int index)
+            {
+                return new Vector3(
+                    (index % MaxPerRow) * ColStep,
+                    (index / MaxPerRow) * RowStep,
+                    0f);
+            }
+
+            private static SerializedProperty TryFind(SerializedObject so, string path)
+            {
+                var p = so.FindProperty(path);
+                if (p == null) Debug.Log($"[ProxyBuilder] Property not found: {path}");
+                return p;
+            }
+
+            // ── Step 1: TOS ───────────────────────────────
+
+            private void ExtractTOS(SerializedObject so)
+            {
+                // Try multiple possible paths for the string table
+                var tosProp = TryFind(so, "m_TOS");
+                if (tosProp == null || !tosProp.isArray) return;
+
+                for (int i = 0; i < tosProp.arraySize; i++)
                 {
-                    var so = new SerializedObject(source);
-                    var lp = so.FindProperty("m_AnimatorLayers");
-                    if (lp == null || !lp.isArray || lp.arraySize == 0)
-                        throw new InvalidOperationException("No layer data (editor layers are stripped).");
-                    // We can read array-size but can't fully reconstruct via SerializedObject
-                    throw new InvalidOperationException(
-                        $"Controller has {lp.arraySize} serialized layer(s) but public API returns none. " +
-                        "Open an issue with a sample bundle.");
+                    var el = tosProp.GetArrayElementAtIndex(i);
+                    var hashProp = el.FindPropertyRelative("first");
+                    var nameProp = el.FindPropertyRelative("second");
+                    if (hashProp != null && nameProp != null)
+                        _tos[(uint)hashProp.longValue] = nameProp.stringValue;
                 }
+                Debug.Log($"[ProxyBuilder] TOS: {_tos.Count} entries");
+            }
 
-                _proxy = AnimatorController.CreateAnimatorControllerAtPath(path);
-                while (_proxy.layers.Length > 0)
-                    _proxy.RemoveLayer(0);
+            // ── Step 2: animation clips ───────────────────
 
-                // Pass 1: layers + state machines
-                for (int i = 0; i < srcLayers.Length; i++)
+            private void ExtractClips(SerializedObject so)
+            {
+                var clipProp = TryFind(so, "m_AnimationClips");
+                if (clipProp == null || !clipProp.isArray) return;
+
+                _clips = new AnimationClip[clipProp.arraySize];
+                for (int i = 0; i < clipProp.arraySize; i++)
+                    _clips[i] = clipProp.GetArrayElementAtIndex(i).objectReferenceValue as AnimationClip;
+
+                Debug.Log($"[ProxyBuilder] Clips: {_clips.Length}");
+            }
+
+            // ── Step 3: parameters ────────────────────────
+
+            private void ExtractParameters(SerializedObject so)
+            {
+                // public API may work even for bundle controllers
+                if (_src is AnimatorController editorAC && editorAC.parameters.Length > 0)
                 {
-                    var src = srcLayers[i];
-                    _proxy.AddLayer(new AnimatorControllerLayer
-                    {
-                        name = string.IsNullOrEmpty(src.name) ? $"Layer {i}" : src.name,
-                        defaultWeight = i == 0 ? 1f : src.defaultWeight,
-                        avatarMask = src.avatarMask,
-                        blendingMode = src.blendingMode,
-                        iKPass = src.iKPass,
-                        syncedLayerIndex = src.syncedLayerIndex,
-                        syncedLayerAffectsTiming = src.syncedLayerAffectsTiming,
-                    });
-
-                    if (src.stateMachine != null)
-                        CopyStructure(src.stateMachine, _proxy.layers[i].stateMachine);
-                }
-
-                // Parameters
-                if (source.parameters is { Length: > 0 })
-                    _proxy.parameters = source.parameters.Select(p => new AnimatorControllerParameter
+                    _dst.parameters = editorAC.parameters.Select(p => new AnimatorControllerParameter
                     {
                         name = p.name, type = p.type,
                         defaultBool = p.defaultBool, defaultFloat = p.defaultFloat, defaultInt = p.defaultInt,
                     }).ToArray();
-
-                // Pass 2: transitions
-                for (int i = 0; i < srcLayers.Length; i++)
-                    if (srcLayers[i].stateMachine != null)
-                        CopyTransitions(srcLayers[i].stateMachine);
-
-                return _proxy;
-            }
-
-            private void CopyStructure(AnimatorStateMachine src, AnimatorStateMachine dst)
-            {
-                _mm[src] = dst;
-                dst.entryPosition = EntryPos;
-                dst.anyStatePosition = AnyPos;
-                dst.exitPosition = ExitPos;
-                dst.parentStateMachinePosition = ParentPos;
-
-                var kids = src.states;
-                int cols = Mathf.Max(1, Mathf.CeilToInt(Mathf.Sqrt(kids.Length)));
-                for (int i = 0; i < kids.Length; i++)
-                {
-                    var ss = kids[i].state;
-                    if (!ss) continue;
-                    var p = StateOrigin + new Vector3((i % cols) * ColStep, (i / cols) * RowStep);
-                    var ds = dst.AddState(ss.name, p);
-                    CopyState(ss, ds);
-                    _sm[ss] = ds;
+                    Debug.Log($"[ProxyBuilder] Params (public): {_dst.parameters.Length}");
+                    return;
                 }
 
-                var subs = src.stateMachines;
-                int sr = Mathf.CeilToInt((float)kids.Length / cols) + 1;
-                for (int i = 0; i < subs.Length; i++)
+                // Try runtime parameter array
+                var valArr = TryFind(so, "m_Controller.m_ValueArray");
+                if (valArr == null || !valArr.isArray)
+                    valArr = TryFind(so, "m_ValueArray");
+                if (valArr == null || !valArr.isArray) return;
+
+                var paramList = new List<AnimatorControllerParameter>();
+                for (int i = 0; i < valArr.arraySize; i++)
                 {
-                    var sm = subs[i].stateMachine;
-                    if (!sm) continue;
-                    var p = StateOrigin + new Vector3((i % cols) * ColStep, (sr + i / cols) * RowStep);
-                    var dm = dst.AddStateMachine(sm.name, p);
-                    CopyStructure(sm, dm);
-                }
+                    var el = valArr.GetArrayElementAtIndex(i);
+                    var idProp = el.FindPropertyRelative("m_ID") ?? el.FindPropertyRelative("m_NameID");
+                    var typeProp = el.FindPropertyRelative("m_Type");
+                    var defF = el.FindPropertyRelative("m_DefaultFloat");
+                    var defI = el.FindPropertyRelative("m_DefaultInt");
+                    var defB = el.FindPropertyRelative("m_DefaultBool");
 
-                CopyBehaviours(src.behaviours, dst);
-            }
+                    if (idProp == null) continue;
+                    var name = ResolveName(_tos, (uint)idProp.longValue);
+                    if (string.IsNullOrEmpty(name)) name = $"Param_{i}";
 
-            private void CopyState(AnimatorState src, AnimatorState dst)
-            {
-                dst.speed = src.speed;
-                dst.cycleOffset = src.cycleOffset;
-                dst.mirror = src.mirror;
-                dst.iKOnFeet = src.iKOnFeet;
-                dst.writeDefaultValues = src.writeDefaultValues;
-                dst.tag = src.tag;
-                dst.speedParameter = src.speedParameter;
-                dst.speedParameterActive = src.speedParameterActive;
-                dst.mirrorParameter = src.mirrorParameter;
-                dst.mirrorParameterActive = src.mirrorParameterActive;
-                dst.cycleOffsetParameter = src.cycleOffsetParameter;
-                dst.cycleOffsetParameterActive = src.cycleOffsetParameterActive;
-                dst.timeParameter = src.timeParameter;
-                dst.timeParameterActive = src.timeParameterActive;
-                dst.motion = CloneMotion(src.motion);
-                CopyBehaviours(src.behaviours, dst);
-            }
-
-            private void CopyTransitions(AnimatorStateMachine src)
-            {
-                if (!_mm.TryGetValue(src, out var dst)) return;
-
-                foreach (var ch in src.states)
-                {
-                    var ss = ch.state;
-                    if (!ss || !_sm.TryGetValue(ss, out var ds)) continue;
-                    foreach (var t in ss.transitions)
+                    var pType = (AnimatorControllerParameterType)(typeProp?.intValue ?? 1);
+                    paramList.Add(new AnimatorControllerParameter
                     {
-                        AnimatorStateTransition ct = null;
-                        if (t.isExit) ct = ds.AddExitTransition();
-                        else if (t.destinationState != null && _sm.TryGetValue(t.destinationState, out var ts)) ct = ds.AddTransition(ts);
-                        else if (t.destinationStateMachine != null && _mm.TryGetValue(t.destinationStateMachine, out var tm)) ct = ds.AddTransition(tm);
-                        if (ct != null) ApplyBody(t, ct);
+                        name = name, type = pType,
+                        defaultFloat = defF?.floatValue ?? 0f,
+                        defaultInt = defI?.intValue ?? 0,
+                        defaultBool = defB?.boolValue ?? false,
+                    });
+                }
+                if (paramList.Count > 0) _dst.parameters = paramList.ToArray();
+                Debug.Log($"[ProxyBuilder] Params (runtime): {paramList.Count}");
+            }
+
+            // ── Step 4: layers ─────────────────────────────
+
+            private int ExtractLayers(SerializedObject so)
+            {
+                // Try public API first
+                if (_src is AnimatorController editorAC && editorAC.layers.Length > 0)
+                {
+                    int pubCount = 0;
+                    for (int i = 0; i < editorAC.layers.Length; i++)
+                    {
+                        var sl = editorAC.layers[i];
+                        if (sl.stateMachine == null) continue;
+
+                        _dst.AddLayer(new AnimatorControllerLayer
+                        {
+                            name = string.IsNullOrEmpty(sl.name) ? $"Layer {i}" : sl.name,
+                            defaultWeight = sl.defaultWeight,
+                            avatarMask = sl.avatarMask,
+                            blendingMode = sl.blendingMode,
+                            iKPass = sl.iKPass,
+                            syncedLayerIndex = sl.syncedLayerIndex,
+                            syncedLayerAffectsTiming = sl.syncedLayerAffectsTiming,
+                        });
+                        pubCount++;
+                    }
+                    if (pubCount > 0) { Debug.Log($"[ProxyBuilder] Layers (public): {pubCount}"); return pubCount; }
+                }
+
+                // Runtime layer array
+                var arr = TryFind(so, "m_Controller.m_LayerArray");
+                if (arr == null || !arr.isArray)
+                    arr = TryFind(so, "m_LayerArray");
+                if (arr == null || !arr.isArray) return 0;
+
+                for (int i = 0; i < arr.arraySize; i++)
+                {
+                    var el = arr.GetArrayElementAtIndex(i);
+                    var nameHash = el.FindPropertyRelative("m_Binding")?.longValue
+                                ?? el.FindPropertyRelative("m_Name")?.longValue ?? 0;
+                    var name = ResolveName(_tos, (uint)nameHash);
+                    if (string.IsNullOrEmpty(name)) name = $"Layer_{i}";
+
+                    var blend = (AnimatorLayerBlendingMode)(el.FindPropertyRelative("m_LayerBlendingMode")?.intValue ?? 0);
+                    var weight = el.FindPropertyRelative("m_DefaultWeight")?.floatValue ?? 1f;
+
+                    _dst.AddLayer(new AnimatorControllerLayer
+                    {
+                        name = name,
+                        defaultWeight = weight,
+                        blendingMode = blend,
+                    });
+                }
+                Debug.Log($"[ProxyBuilder] Layers (runtime): {arr.arraySize}");
+                return arr.arraySize;
+            }
+
+            // ── Step 5: states ─────────────────────────────
+
+            private void ExtractStates(SerializedObject so, int layerCount)
+            {
+                // State machine array
+                var smArr = TryFind(so, "m_Controller.m_StateMachineArray");
+                if (smArr == null || !smArr.isArray)
+                    smArr = TryFind(so, "m_StateMachineArray");
+
+                // State constant array
+                var scArr = TryFind(so, "m_Controller.m_StateConstantArray");
+                if (scArr == null || !scArr.isArray)
+                    scArr = TryFind(so, "m_StateConstantArray");
+
+                if (scArr == null || !scArr.isArray) return;
+
+                // Read all state descriptors
+                var stateDescs = new List<StateDesc>();
+                for (int i = 0; i < scArr.arraySize; i++)
+                {
+                    var el = scArr.GetArrayElementAtIndex(i);
+                    var nameHash = (uint)(el.FindPropertyRelative("m_NameID")?.longValue
+                                       ?? el.FindPropertyRelative("m_Name")?.longValue ?? 0);
+                    var name = ResolveName(_tos, nameHash);
+                    if (string.IsNullOrEmpty(name)) name = $"State_{i}";
+
+                    stateDescs.Add(new StateDesc
+                    {
+                        index = i,
+                        name = name,
+                        speed = el.FindPropertyRelative("m_Speed")?.floatValue ?? 1f,
+                        cycleOffset = el.FindPropertyRelative("m_CycleOffset")?.floatValue ?? 0f,
+                        mirror = el.FindPropertyRelative("m_Mirror")?.boolValue ?? false,
+                        ikOnFeet = el.FindPropertyRelative("m_IKOnFeet")?.boolValue ?? false,
+                        writeDefaults = el.FindPropertyRelative("m_WriteDefaultValues")?.boolValue ?? false,
+                        speedParamIdx = el.FindPropertyRelative("m_SpeedParam")?.intValue ?? -1,
+                        mirrorParamIdx = el.FindPropertyRelative("m_MirrorParam")?.intValue ?? -1,
+                        cycleOffsetParamIdx = el.FindPropertyRelative("m_CycleOffsetParam")?.intValue ?? -1,
+                        motionIndex = el.FindPropertyRelative("m_MotionIndex")?.intValue ?? -1,
+                        tagHash = (uint)(el.FindPropertyRelative("m_Tag")?.longValue ?? 0),
+                    });
+                }
+
+                // Assign states to layers via state machine array
+                if (smArr != null && smArr.isArray && layerCount > 0)
+                {
+                    for (int li = 0; li < Mathf.Min(layerCount, smArr.arraySize); li++)
+                    {
+                        var smEl = smArr.GetArrayElementAtIndex(li);
+                        var firstState = smEl.FindPropertyRelative("m_FirstStateIndex")?.intValue ?? -1;
+                        var stateCount = smEl.FindPropertyRelative("m_StateCount")?.intValue ?? 0;
+                        var defaultIdx = smEl.FindPropertyRelative("m_DefaultState")?.intValue ?? -1;
+
+                        var dstSM = _dst.layers[li].stateMachine;
+                        dstSM.entryPosition = EntryPos;
+                        dstSM.anyStatePosition = AnyPos;
+                        dstSM.exitPosition = ExitPos;
+                        dstSM.parentStateMachinePosition = ParentPos;
+                        _machineMap[li] = dstSM;
+
+                        // Place states on grid
+                        for (int si = 0; si < stateCount && (firstState + si) < stateDescs.Count; si++)
+                        {
+                            var sd = stateDescs[firstState + si];
+                            var pos = GridPos(si);
+                            var state = dstSM.AddState(sd.name, pos);
+                            state.speed = sd.speed;
+                            state.cycleOffset = sd.cycleOffset;
+                            state.mirror = sd.mirror;
+                            state.iKOnFeet = sd.ikOnFeet;
+                            state.writeDefaultValues = sd.writeDefaults;
+                            if (sd.tagHash != 0)
+                            {
+                                var tagName = ResolveName(_tos, sd.tagHash);
+                                if (!string.IsNullOrEmpty(tagName)) state.tag = tagName;
+                            }
+
+                            _stateMap[sd.index] = state;
+                        }
+
+                        // Default state
+                        if (defaultIdx >= 0 && _stateMap.TryGetValue(defaultIdx, out var def))
+                            dstSM.defaultState = def;
+                    }
+                }
+                else
+                {
+                    // No state machine array — assign all states to first layer(s)
+                    var perLayer = Mathf.Max(1, stateDescs.Count / Mathf.Max(1, layerCount));
+                    for (int li = 0; li < layerCount; li++)
+                    {
+                        var dstSM = _dst.layers[li].stateMachine;
+                        dstSM.entryPosition = EntryPos;
+                        dstSM.anyStatePosition = AnyPos;
+                        dstSM.exitPosition = ExitPos;
+                        dstSM.parentStateMachinePosition = ParentPos;
+                        _machineMap[li] = dstSM;
+
+                        int start = li * perLayer;
+                        int end = Mathf.Min(start + perLayer, stateDescs.Count);
+                        for (int si = start; si < end; si++)
+                        {
+                            var sd = stateDescs[si];
+                            var pos = GridPos(si - start);
+                            var state = dstSM.AddState(sd.name, pos);
+                            state.speed = sd.speed;
+                            state.cycleOffset = sd.cycleOffset;
+                            state.mirror = sd.mirror;
+                            state.iKOnFeet = sd.ikOnFeet;
+                            state.writeDefaultValues = sd.writeDefaults;
+                            if (sd.tagHash != 0)
+                            {
+                                var tagName = ResolveName(_tos, sd.tagHash);
+                                if (!string.IsNullOrEmpty(tagName)) state.tag = tagName;
+                            }
+                            _stateMap[sd.index] = state;
+                        }
                     }
                 }
 
-                foreach (var t in src.anyStateTransitions)
-                {
-                    AnimatorStateTransition ct = null;
-                    if (t.destinationState != null && _sm.TryGetValue(t.destinationState, out var ts)) ct = dst.AddAnyStateTransition(ts);
-                    else if (t.destinationStateMachine != null && _mm.TryGetValue(t.destinationStateMachine, out var tm)) ct = dst.AddAnyStateTransition(tm);
-                    if (ct != null) ApplyBody(t, ct);
-                }
-
-                foreach (var t in src.entryTransitions)
-                {
-                    AnimatorTransition ct = null;
-                    if (t.destinationState != null && _sm.TryGetValue(t.destinationState, out var ts)) ct = dst.AddEntryTransition(ts);
-                    else if (t.destinationStateMachine != null && _mm.TryGetValue(t.destinationStateMachine, out var tm)) ct = dst.AddEntryTransition(tm);
-                    if (ct != null) ApplyCond(t.conditions, ct);
-                }
-
-                if (src.defaultState != null && _sm.TryGetValue(src.defaultState, out var df))
-                    dst.defaultState = df;
-
-                foreach (var sub in src.stateMachines)
-                    if (sub.stateMachine) CopyTransitions(sub.stateMachine);
+                Debug.Log($"[ProxyBuilder] States: {stateDescs.Count} across {layerCount} layer(s)");
             }
 
-            private static void ApplyBody(AnimatorStateTransition src, AnimatorStateTransition dst)
+            private struct StateDesc
             {
-                dst.hasExitTime = src.hasExitTime; dst.exitTime = src.exitTime;
-                dst.hasFixedDuration = src.hasFixedDuration; dst.duration = src.duration;
-                dst.offset = src.offset;
-                dst.interruptionSource = src.interruptionSource;
-                dst.orderedInterruption = src.orderedInterruption;
-                dst.canTransitionToSelf = src.canTransitionToSelf;
-                dst.mute = src.mute; dst.solo = src.solo;
-                ApplyCond(src.conditions, dst);
+                public int index;
+                public string name;
+                public float speed, cycleOffset;
+                public bool mirror, ikOnFeet, writeDefaults;
+                public int speedParamIdx, mirrorParamIdx, cycleOffsetParamIdx;
+                public int motionIndex;
+                public uint tagHash;
             }
 
-            private static void ApplyCond(AnimatorCondition[] conds, AnimatorStateTransition dst)
-            { foreach (var c in conds) dst.AddCondition(c.mode, c.threshold, c.parameter); }
+            // ── Step 6: blend trees ────────────────────────
 
-            private static void ApplyCond(AnimatorCondition[] conds, AnimatorTransition dst)
-            { foreach (var c in conds) dst.AddCondition(c.mode, c.threshold, c.parameter); }
-
-            private void CopyBehaviours(StateMachineBehaviour[] src, AnimatorState dst)
+            private void ExtractBlendTrees(SerializedObject so)
             {
-                if (src == null) return;
-                foreach (var b in src)
-                {
-                    if (!b) continue;
-                    var nb = dst.AddStateMachineBehaviour(b.GetType());
-                    if (nb) EditorUtility.CopySerialized(b, nb);
-                }
-            }
+                var btArr = TryFind(so, "m_Controller.m_BlendTreeConstantArray");
+                if (btArr == null || !btArr.isArray)
+                    btArr = TryFind(so, "m_BlendTreeConstantArray");
+                if (btArr == null || !btArr.isArray) return;
 
-            private void CopyBehaviours(StateMachineBehaviour[] src, AnimatorStateMachine dst)
-            {
-                if (src == null) return;
-                foreach (var b in src)
-                {
-                    if (!b) continue;
-                    var nb = dst.AddStateMachineBehaviour(b.GetType());
-                    if (nb) EditorUtility.CopySerialized(b, nb);
-                }
-            }
+                var nodeArr = TryFind(so, "m_Controller.m_BlendTreeNodeConstantArray");
+                if (nodeArr == null || !nodeArr.isArray)
+                    nodeArr = TryFind(so, "m_BlendTreeNodeConstantArray");
 
-            private Motion CloneMotion(Motion src)
-            {
-                if (!src) return null;
-                if (_mo.TryGetValue(src, out var c)) return c;
-
-                if (src is BlendTree bt)
+                // First pass: read node array (child motion data)
+                if (nodeArr != null && nodeArr.isArray)
                 {
-                    var tree = new BlendTree
+                    for (int i = 0; i < nodeArr.arraySize; i++)
                     {
-                        name = bt.name, hideFlags = HideFlags.HideInHierarchy,
-                        blendType = bt.blendType, blendParameter = bt.blendParameter,
-                        blendParameterY = bt.blendParameterY,
-                        minThreshold = bt.minThreshold, maxThreshold = bt.maxThreshold,
-                        useAutomaticThresholds = bt.useAutomaticThresholds,
+                        var el = nodeArr.GetArrayElementAtIndex(i);
+                        _childMotionData[i] = new ChildMotionData
+                        {
+                            motionIndex = el.FindPropertyRelative("m_ClipID")?.intValue
+                                       ?? el.FindPropertyRelative("m_MotionIndex")?.intValue ?? -1,
+                            threshold = el.FindPropertyRelative("m_Threshold")?.floatValue ?? 0f,
+                            position = new Vector2(
+                                el.FindPropertyRelative("m_PositionX")?.floatValue ?? 0f,
+                                el.FindPropertyRelative("m_PositionY")?.floatValue ?? 0f),
+                            timeScale = el.FindPropertyRelative("m_TimeScale")?.floatValue ?? 1f,
+                        };
+                    }
+                }
+
+                // Second pass: read blend tree descriptors, build recursive trees
+                for (int i = 0; i < btArr.arraySize; i++)
+                {
+                    var el = btArr.GetArrayElementAtIndex(i);
+                    var nameHash = (uint)(el.FindPropertyRelative("m_NameID")?.longValue
+                                       ?? el.FindPropertyRelative("m_Name")?.longValue ?? 0);
+                    var name = ResolveName(_tos, nameHash);
+                    if (string.IsNullOrEmpty(name)) name = $"BlendTree_{i}";
+
+                    var typeVal = el.FindPropertyRelative("m_BlendType")?.intValue ?? 0;
+                    var childStart = el.FindPropertyRelative("m_ChildIndicesArrayIndex")?.intValue
+                                  ?? el.FindPropertyRelative("m_Childs")?.intValue ?? 0;
+                    var childCount = el.FindPropertyRelative("m_ChildCount")?.intValue
+                                  ?? el.FindPropertyRelative("m_NumChildren")?.intValue ?? 0;
+                    // Workaround: the actual first child index might be different.
+                    // Many Unity versions encode it as m_NodeStartIndex
+                    var nodeStart = el.FindPropertyRelative("m_NodeStartIndex")?.intValue
+                                 ?? el.FindPropertyRelative("m_FirstChildIndex")?.intValue
+                                 ?? childStart;
+
+                    var tree = BuildBlendTreeRecursive(name, typeVal, nodeStart, childCount, i);
+                    _blendMap[i] = tree;
+                    AssetDatabase.AddObjectToAsset(tree, _dst);
+                }
+
+                Debug.Log($"[ProxyBuilder] BlendTrees: {btArr.arraySize}");
+            }
+
+            private BlendTree BuildBlendTreeRecursive(
+                string name, int blendType, int nodeStart, int childCount, int btIndex)
+            {
+                var tree = new BlendTree
+                {
+                    name = name,
+                    hideFlags = HideFlags.HideInHierarchy,
+                    blendType = MapBlendType(blendType),
+                    useAutomaticThresholds = blendType == 0, // 1D
+                };
+
+                // Needs parameter name from TOS or parameter list
+                // We'll set this in a second pass, or leave as-is
+
+                var children = new List<ChildMotion>();
+                for (int ci = 0; ci < childCount; ci++)
+                {
+                    int nodeIdx = nodeStart + ci;
+                    if (!_childMotionData.TryGetValue(nodeIdx, out var cmd))
+                    {
+                        children.Add(new ChildMotion { threshold = ci });
+                        continue;
+                    }
+
+                    var child = new ChildMotion
+                    {
+                        threshold = cmd.threshold,
+                        position = cmd.position,
+                        timeScale = cmd.timeScale,
                     };
-                    _mo[src] = tree;
-                    AssetDatabase.AddObjectToAsset(tree, _proxy);
-                    tree.children = bt.children.Select(ch => new ChildMotion
+
+                    // Resolve motion
+                    if (cmd.motionIndex >= 0)
                     {
-                        motion = CloneMotion(ch.motion), threshold = ch.threshold,
-                        position = ch.position, timeScale = ch.timeScale,
-                        cycleOffset = ch.cycleOffset, directBlendParameter = ch.directBlendParameter,
-                        mirror = ch.mirror,
-                    }).ToArray();
-                    return tree;
-                }
+                        // Could be an animation clip or a blend tree
+                        if (_clips != null && cmd.motionIndex < _clips.Length && _clips[cmd.motionIndex] != null)
+                        {
+                            var copy = Instantiate(_clips[cmd.motionIndex]);
+                            copy.name = _clips[cmd.motionIndex].name;
+                            AssetDatabase.AddObjectToAsset(copy, _dst);
+                            child.motion = copy;
+                        }
+                        else if (_blendMap.TryGetValue(cmd.motionIndex, out var subTree))
+                        {
+                            child.motion = subTree;
+                        }
+                    }
 
-                if (src is AnimationClip clip)
+                    children.Add(child);
+                }
+                tree.children = children.ToArray();
+                return tree;
+            }
+
+            private static BlendTreeType MapBlendType(int raw)
+            {
+                return raw switch
                 {
-                    var copy = Instantiate(clip);
-                    copy.name = clip.name;
-                    _mo[src] = copy;
-                    AssetDatabase.AddObjectToAsset(copy, _proxy);
-                    return copy;
+                    0 => BlendTreeType.Simple1D,
+                    1 => BlendTreeType.SimpleDirectional2D,
+                    2 => BlendTreeType.FreeformDirectional2D,
+                    3 => BlendTreeType.FreeformCartesian2D,
+                    4 => BlendTreeType.Direct,
+                    _ => BlendTreeType.Simple1D,
+                };
+            }
+
+            // ── Step 7: assign motions ─────────────────────
+
+            private void AssignMotions(SerializedObject so)
+            {
+                var scArr = TryFind(so, "m_Controller.m_StateConstantArray");
+                if (scArr == null || !scArr.isArray)
+                    scArr = TryFind(so, "m_StateConstantArray");
+                if (scArr == null || !scArr.isArray) return;
+
+                for (int i = 0; i < scArr.arraySize; i++)
+                {
+                    if (!_stateMap.TryGetValue(i, out var state)) continue;
+
+                    var el = scArr.GetArrayElementAtIndex(i);
+                    var motIdx = el.FindPropertyRelative("m_MotionIndex")?.intValue
+                              ?? el.FindPropertyRelative("m_BlendTreeIndex")?.intValue ?? -1;
+
+                    if (motIdx < 0) continue;
+
+                    if (_blendMap.TryGetValue(motIdx, out var bt))
+                    {
+                        state.motion = bt;
+                    }
+                    else if (_clips != null && motIdx < _clips.Length && _clips[motIdx] != null)
+                    {
+                        var copy = Instantiate(_clips[motIdx]);
+                        copy.name = _clips[motIdx].name;
+                        AssetDatabase.AddObjectToAsset(copy, _dst);
+                        state.motion = copy;
+                    }
                 }
 
-                _mo[src] = src;
-                return src;
+                // Also assign blend parameter names to blend trees
+                var btArr = TryFind(so, "m_Controller.m_BlendTreeConstantArray");
+                if (btArr == null || !btArr.isArray)
+                    btArr = TryFind(so, "m_BlendTreeConstantArray");
+                if (btArr != null && btArr.isArray)
+                {
+                    for (int i = 0; i < btArr.arraySize; i++)
+                    {
+                        if (!_blendMap.TryGetValue(i, out var tree)) continue;
+                        var el = btArr.GetArrayElementAtIndex(i);
+                        var blendParamHash = (uint)(el.FindPropertyRelative("m_BlendParameterID")?.longValue
+                                                  ?? el.FindPropertyRelative("m_BlendParameter")?.longValue ?? 0);
+                        var blendParamYHash = (uint)(el.FindPropertyRelative("m_BlendParameterYID")?.longValue
+                                                   ?? el.FindPropertyRelative("m_BlendParameterY")?.longValue ?? 0);
+
+                        tree.blendParameter = ResolveName(_tos, blendParamHash);
+                        tree.blendParameterY = ResolveName(_tos, blendParamYHash);
+
+                        var minThresh = el.FindPropertyRelative("m_MinThreshold")?.floatValue ?? 0f;
+                        var maxThresh = el.FindPropertyRelative("m_MaxThreshold")?.floatValue ?? 1f;
+                        tree.minThreshold = minThresh;
+                        tree.maxThreshold = maxThresh;
+                    }
+                }
+
+                Debug.Log($"[ProxyBuilder] Motions assigned.");
+            }
+
+            // ── Step 8: transitions ────────────────────────
+
+            private void ExtractTransitions(SerializedObject so, int layerCount)
+            {
+                var transArr = TryFind(so, "m_Controller.m_TransitionConstantArray");
+                if (transArr == null || !transArr.isArray)
+                    transArr = TryFind(so, "m_TransitionConstantArray");
+                var condArr = TryFind(so, "m_Controller.m_ConditionConstantArray");
+                if (condArr == null || !condArr.isArray)
+                    condArr = TryFind(so, "m_ConditionConstantArray");
+                var anyArr = TryFind(so, "m_Controller.m_AnyStateTransitionConstantArray");
+                if (anyArr == null || !anyArr.isArray)
+                    anyArr = TryFind(so, "m_AnyStateTransitionConstantArray");
+
+                if (transArr == null || !transArr.isArray)
+                {
+                    Debug.Log("[ProxyBuilder] Transitions: none found");
+                    return;
+                }
+
+                // Build condition lookup: condition index → list of conditions
+                var condMap = new Dictionary<int, List<AnimatorCondition>>();
+                if (condArr != null && condArr.isArray)
+                {
+                    int currentBundle = -1;
+                    List<AnimatorCondition> currentList = null;
+                    for (int i = 0; i < condArr.arraySize; i++)
+                    {
+                        var el = condArr.GetArrayElementAtIndex(i);
+                        var bundleIdx = el.FindPropertyRelative("m_ConditionBundleIndex")?.intValue
+                                     ?? el.FindPropertyRelative("m_BundleIndex")?.intValue
+                                     ?? el.FindPropertyRelative("m_TransitionIndex")?.intValue ?? -1;
+
+                        if (bundleIdx != currentBundle)
+                        {
+                            currentBundle = bundleIdx;
+                            currentList = new List<AnimatorCondition>();
+                            if (currentBundle >= 0)
+                                condMap[currentBundle] = currentList;
+                        }
+
+                        if (currentList == null) continue;
+
+                        var mode = (AnimatorConditionMode)(el.FindPropertyRelative("m_ConditionMode")?.intValue ?? 3); // 3 = If
+                        var paramHash = (uint)(el.FindPropertyRelative("m_ParameterID")?.longValue
+                                            ?? el.FindPropertyRelative("m_EventID")?.longValue ?? 0);
+                        var threshold = el.FindPropertyRelative("m_Threshold")?.floatValue ?? 0f;
+                        var paramName = ResolveName(_tos, paramHash);
+
+                        currentList.Add(new AnimatorCondition
+                        {
+                            mode = mode,
+                            threshold = threshold,
+                            parameter = string.IsNullOrEmpty(paramName) ? $"Param_{paramHash:X}" : paramName,
+                        });
+                    }
+                }
+
+                // Process transitions
+                for (int ti = 0; ti < transArr.arraySize; ti++)
+                {
+                    var el = transArr.GetArrayElementAtIndex(ti);
+                    var srcIdx = el.FindPropertyRelative("m_SrcStateIndex")?.intValue
+                              ?? el.FindPropertyRelative("m_SourceState")?.intValue ?? -1;
+                    var dstIdx = el.FindPropertyRelative("m_DstStateIndex")?.intValue
+                              ?? el.FindPropertyRelative("m_DestinationState")?.intValue ?? -1;
+                    var isExit = el.FindPropertyRelative("m_IsExit")?.boolValue ?? false;
+                    var layerIdx = el.FindPropertyRelative("m_LayerIndex")?.intValue
+                                ?? el.FindPropertyRelative("m_Layer")?.intValue ?? 0;
+
+                    if (!_stateMap.TryGetValue(srcIdx, out var srcState)) continue;
+                    if (layerIdx < 0 || layerIdx >= _dst.layers.Length) continue;
+
+                    AnimatorStateTransition trans;
+                    if (isExit)
+                    {
+                        trans = srcState.AddExitTransition();
+                    }
+                    else if (_stateMap.TryGetValue(dstIdx, out var dstState))
+                    {
+                        trans = srcState.AddTransition(dstState);
+                    }
+                    else
+                    {
+                        continue;
+                    }
+
+                    // Fill transition properties
+                    trans.hasExitTime = el.FindPropertyRelative("m_HasExitTime")?.boolValue ?? false;
+                    trans.exitTime = el.FindPropertyRelative("m_ExitTime")?.floatValue ?? 1f;
+                    trans.hasFixedDuration = el.FindPropertyRelative("m_HasFixedDuration")?.boolValue ?? false;
+                    trans.duration = el.FindPropertyRelative("m_TransitionDuration")?.floatValue ?? 0.25f;
+                    trans.offset = el.FindPropertyRelative("m_TransitionOffset")?.floatValue ?? 0f;
+                    int interruptVal = el.FindPropertyRelative("m_InterruptionSource")?.intValue ?? 0;
+                    trans.interruptionSource = (TransitionInterruptionSource)interruptVal;
+                    trans.orderedInterruption = el.FindPropertyRelative("m_OrderedInterruption")?.boolValue ?? true;
+                    trans.canTransitionToSelf = el.FindPropertyRelative("m_CanTransitionToSelf")?.boolValue ?? false;
+
+                    // Conditions
+                    var condBundleIdx = el.FindPropertyRelative("m_ConditionBundleIndex")?.intValue
+                                     ?? el.FindPropertyRelative("m_ConditionIndex")?.intValue ?? -1;
+                    if (condBundleIdx >= 0 && condMap.TryGetValue(condBundleIdx, out var conds))
+                    {
+                        foreach (var c in conds)
+                            trans.AddCondition(c.mode, c.threshold, c.parameter);
+                    }
+                }
+
+                // AnyState transitions
+                if (anyArr != null && anyArr.isArray)
+                {
+                    for (int ai = 0; ai < anyArr.arraySize; ai++)
+                    {
+                        var el = anyArr.GetArrayElementAtIndex(ai);
+                        var dstIdx = el.FindPropertyRelative("m_DstStateIndex")?.intValue
+                                  ?? el.FindPropertyRelative("m_DestinationState")?.intValue ?? -1;
+                        var layerIdx = el.FindPropertyRelative("m_LayerIndex")?.intValue
+                                    ?? el.FindPropertyRelative("m_Layer")?.intValue ?? 0;
+
+                        if (!_stateMap.TryGetValue(dstIdx, out var dstState)) continue;
+                        if (layerIdx < 0 || layerIdx >= _dst.layers.Length) continue;
+
+                        var machine = _dst.layers[layerIdx].stateMachine;
+                        var trans = machine.AddAnyStateTransition(dstState);
+
+                        trans.hasExitTime = el.FindPropertyRelative("m_HasExitTime")?.boolValue ?? false;
+                        trans.exitTime = el.FindPropertyRelative("m_ExitTime")?.floatValue ?? 1f;
+                        trans.hasFixedDuration = el.FindPropertyRelative("m_HasFixedDuration")?.boolValue ?? false;
+                        trans.duration = el.FindPropertyRelative("m_TransitionDuration")?.floatValue ?? 0.25f;
+                        trans.offset = el.FindPropertyRelative("m_TransitionOffset")?.floatValue ?? 0f;
+                        trans.canTransitionToSelf = el.FindPropertyRelative("m_CanTransitionToSelf")?.boolValue ?? false;
+
+                        var cbIdx = el.FindPropertyRelative("m_ConditionBundleIndex")?.intValue
+                                 ?? el.FindPropertyRelative("m_ConditionIndex")?.intValue ?? -1;
+                        if (cbIdx >= 0 && condMap.TryGetValue(cbIdx, out var conds))
+                            foreach (var c in conds)
+                                trans.AddCondition(c.mode, c.threshold, c.parameter);
+                    }
+                }
+
+                Debug.Log($"[ProxyBuilder] Transitions: {transArr.arraySize} regular, {anyArr?.arraySize ?? 0} anyState");
             }
         }
     }

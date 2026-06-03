@@ -418,6 +418,8 @@ namespace Cocokoishi.VRCALoader
 
         private static void DrawAssetRow(BundleSlot slot, UnityEngine.Object asset)
         {
+            if (!asset) return; // destroyed object guard
+
             var rowRect = EditorGUILayout.BeginHorizontal();
             if (rowRect.Contains(Event.current.mousePosition))
             {
