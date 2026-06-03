@@ -190,7 +190,7 @@ namespace Cocokoishi.VRCALoader
                 if (asset is GameObject go)
                 {
                     StripPipelineManager(go);
-                    PatchEmptyControllers(go);
+                    if (!Application.isPlaying) PatchEmptyControllers(go);
                 }
 #endif
             }
