@@ -15,9 +15,10 @@ namespace Cocokoishi.VRCALoader
     public class ControllerExtract : EditorWindow
     {
         private static readonly string AssetRipperDir = Path.GetFullPath(
-            Path.Combine(Application.dataPath, "VRCALoader/Assetripper"));
+            Path.Combine(Application.dataPath, "../VRCALoader_Data/Assetripper"));
         private static readonly string AssetRipperExe = Path.Combine(AssetRipperDir, "AssetRipper.GUI.Free.exe");
-        private static readonly string ExportsRoot = Path.Combine(AssetRipperDir, "Exports");
+        private static readonly string ExportsRoot = Path.GetFullPath(
+            Path.Combine(Application.dataPath, "VRCALoader/Exports"));
 
         private const string DownloadUrl =
             "https://github.com/AssetRipper/AssetRipper/releases/download/1.3.14/AssetRipper_win_x64.zip";

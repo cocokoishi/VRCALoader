@@ -2,6 +2,12 @@
 
 All notable changes to this package will be documented in this file.
 
+## [0.0.5] - 2026-06-03
+
+### Changed
+- AssetRipper program and config file relocated to `VRCALoader_Data/` at project root (alongside `Assets/`), keeping editor tooling separate from Unity asset imports.
+- Exports directory moved to `Assets/VRCALoader/Exports/` so extracted controllers remain within the Assets tree for direct Unity indexing.
+
 ## [0.0.4] - 2026-06-03
 
 ### Changed

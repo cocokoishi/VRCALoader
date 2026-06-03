@@ -35,7 +35,7 @@ namespace Cocokoishi.VRCALoader
         private int _slotCount = 1;
 
         private static string SettingsPath =>
-            Path.GetFullPath(Path.Combine(Application.dataPath, "VRCALoader/vrcaloader-settings.json"));
+            Path.GetFullPath(Path.Combine(Application.dataPath, "../VRCALoader_Data/vrcaloader-settings.json"));
 
         private static readonly Color BadgeBg = new Color(0.17f, 0.024f, 0.024f);
         private static readonly Color BadgeFg = new Color(1f, 0.604f, 0f);
