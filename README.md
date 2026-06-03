@@ -26,4 +26,4 @@ Credit to [dVRC](https://github.com/200Tigersbloxed/dVRC) for the original Asset
 
 While reimplementing dVRC's bundle-loading functionality, I discovered **[FACS Utilities](https://github.com/FACS01-01/FACS_Utilities)** — a more comprehensive editor toolset that handles many VRChat SDK edge cases, including fixes the vanilla SDK inspector is missing. Our controller-patching approach references their `LoadBundle` implementation to ensure the avatar descriptor behaves correctly in both Edit and Play modes.
 
-This project, however, is intentionally lightweight: it is designed solely for recovering and inspecting assets from locally-built VRCA cache files. If you need more advanced AssetRipper-based recovery features, FACS Utilities is worth checking out.
+This project is designed to help recover as much of your original avatar logic as possible when the Unity project files are lost but the locally-built VRCA cache still exists. Special thanks to FACS Utilities for portions of the code we referenced.
