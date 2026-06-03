@@ -25,3 +25,5 @@ The core concept of loading VRCA bundles directly into the Unity Editor was insp
 During development I discovered **[FACS Utilities](https://github.com/FACS01-01/FACS_Utilities)**, a more comprehensive toolset that handles many VRChat SDK edge cases. Its `LoadBundle` implementation informed the controller-patching logic that keeps the avatar descriptor from crashing on bundle-loaded avatars.
 
 This project is designed to help recover as much of your original avatar logic as possible when the Unity project files are lost but the locally-built VRCA cache still exists.
+
+**This tool is not intended to turn incomplete AssetRipper output into a finished avatar.** It displays the loaded AssetBundle as a visual reference so you can manually recreate your work using your own legitimate assets. Do not attempt to upload the loaded bundle content.
