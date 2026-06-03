@@ -2,6 +2,20 @@
 
 All notable changes to this package will be documented in this file.
 
+## [0.0.4] - 2026-06-03
+
+### Changed
+- Strip-non-controller checkbox now defaults to off and persists via EditorPrefs.
+- Bundle path selection persists across domain reloads and auto-matches VRCALoader slots.
+- AssetRipper is no longer launched automatically; a `.bat` file is generated and the user starts it manually.
+
+### Fixed
+- Extract button shows contextual help ("No bundle selected" / "File not found") when disabled instead of a silent greyed-out state.
+- VRCALoader slot list is refreshed every frame so Controller Extract always has current bundle paths.
+- Post-export flattening removes the `ExportedProject` wrapper and places assets directly under the export folder.
+- Delete button in extraction history now also removes the `.meta` folder.
+- Null-ref guard in asset row draw prevents rare GUI exceptions.
+
 ## [0.0.3] - 2026-06-03
 
 ### Changed
