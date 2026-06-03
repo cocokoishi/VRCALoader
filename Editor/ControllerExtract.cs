@@ -28,6 +28,10 @@ namespace Cocokoishi.VRCALoader
         private const string DownloadUrl =
             "https://github.com/AssetRipper/AssetRipper/releases/download/1.3.14/AssetRipper_win_x64.zip";
 
+        // Populated by VRCALoader before Open()
+        public static string[] BundlePaths = Array.Empty<string>();
+
+        private int _selectedIndex = -1;
         private string _bundlePath = "";
         private Vector2 _scroll;
         private string _status = "";
@@ -59,14 +63,35 @@ namespace Cocokoishi.VRCALoader
 
             EditorGUILayout.Space(6);
 
-            // Bundle path row
+            // Bundle selection — populated from VRCALoader slots
+            EditorGUILayout.LabelField("Bundle from VRCALoader Slots", EditorStyles.miniLabel);
             EditorGUILayout.BeginHorizontal();
-            EditorGUILayout.LabelField("Bundle", GUILayout.Width(48));
-            _bundlePath = EditorGUILayout.TextField(_bundlePath);
-            if (GUILayout.Button("...", EditorStyles.miniButton, GUILayout.Width(28)))
+            var names = BundlePaths.Length > 0
+                ? BundlePaths.Select(p => Path.GetFileName(p)).ToArray()
+                : new[] { "(no slots — use Browse)" };
+
+            if (_selectedIndex < 0 || _selectedIndex >= BundlePaths.Length)
+            {
+                _selectedIndex = BundlePaths.Length > 0 ? 0 : -1;
+                if (_selectedIndex >= 0)
+                    _bundlePath = BundlePaths[_selectedIndex];
+            }
+
+            var newIdx = EditorGUILayout.Popup("Source", _selectedIndex, names);
+            if (newIdx != _selectedIndex && newIdx < BundlePaths.Length)
+            {
+                _selectedIndex = newIdx;
+                _bundlePath = BundlePaths[_selectedIndex];
+            }
+
+            if (GUILayout.Button("Browse", GUILayout.Width(64)))
             {
                 var p = EditorUtility.OpenFilePanel("Select VRCA / VRCW", "", "");
-                if (!string.IsNullOrEmpty(p)) _bundlePath = p;
+                if (!string.IsNullOrEmpty(p))
+                {
+                    _bundlePath = p;
+                    _selectedIndex = -1;
+                }
             }
             EditorGUILayout.EndHorizontal();
 

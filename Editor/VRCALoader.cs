@@ -461,7 +461,12 @@ namespace Cocokoishi.VRCALoader
         {
             EditorGUILayout.Space(4);
             if (GUILayout.Button("Controller Extract  ▾", GUILayout.Height(22)))
+            {
+                ControllerExtract.BundlePaths = _slots
+                    .Where(s => !string.IsNullOrEmpty(s.path))
+                    .Select(s => s.path).ToArray();
                 ControllerExtract.Open();
+            }
             EditorGUILayout.BeginHorizontal(EditorStyles.toolbar);
             EditorGUI.BeginChangeCheck();
             EditorGUILayout.LabelField("Slots", GUILayout.Width(32));
