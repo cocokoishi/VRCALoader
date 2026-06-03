@@ -55,6 +55,11 @@ namespace Cocokoishi.VRCALoader
             w.Show();
         }
 
+        private void OnEnable()
+        {
+            RefreshExtractions();
+        }
+
         private void OnDisable()
         {
             EditorApplication.update -= Pump;
@@ -159,8 +164,14 @@ namespace Cocokoishi.VRCALoader
                     {
                         EditorGUILayout.BeginHorizontal();
                         GUILayout.Space(20);
-                        EditorGUILayout.LabelField(c.fileName, GUILayout.MinWidth(100));
-                        GUILayout.FlexibleSpace();
+                        EditorGUILayout.LabelField(c.fileName);
+                        if (GUILayout.Button("Open", EditorStyles.miniButton, GUILayout.Width(44)))
+                        {
+                            var asset = AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(
+                                "Assets" + c.filePath.Substring(Application.dataPath.Length));
+                            if (asset) { Selection.activeObject = asset; AssetDatabase.OpenAsset(asset); }
+                            else EditorUtility.RevealInFinder(c.filePath);
+                        }
                         if (GUILayout.Button("Copy", EditorStyles.miniButton, GUILayout.Width(44)))
                             GUIUtility.systemCopyBuffer = c.filePath;
                         EditorGUILayout.EndHorizontal();
@@ -188,6 +199,7 @@ namespace Cocokoishi.VRCALoader
 
             PrepareExportDir();
             _busy = true;
+            AssetDatabase.DisallowAutoRefresh();
             _routine = ExtractRoutine();
             EditorApplication.update += Pump;
             Repaint();
@@ -197,29 +209,32 @@ namespace Cocokoishi.VRCALoader
         {
             if (_routine == null || !this)
             {
-                EditorApplication.update -= Pump;
-                _routine = null;
-                _busy = false;
+                CleanupRoutine();
                 return;
             }
 
             try
             {
                 if (!_routine.MoveNext())
-                {
-                    EditorApplication.update -= Pump;
-                    _routine = null;
-                    _busy = false;
-                }
+                    CleanupRoutine();
             }
             catch (Exception e)
             {
-                EditorApplication.update -= Pump;
-                _routine = null;
-                _busy = false;
                 _status = $"Extraction failed: {e.Message}";
                 UnityEngine.Debug.LogError($"[ControllerExtract] {e}");
+                CleanupRoutine();
             }
+            Repaint();
+        }
+
+        private void CleanupRoutine()
+        {
+            EditorApplication.update -= Pump;
+            _routine = null;
+            _busy = false;
+            AssetDatabase.AllowAutoRefresh();
+            AssetDatabase.Refresh();
+            RefreshExtractions();
             Repaint();
         }
 
@@ -412,7 +427,6 @@ namespace Cocokoishi.VRCALoader
             RenameDir(_currentExportDir, "shader", ".shader");
             RenameDir(_currentExportDir, "Scripts", ".Scripts");
             RenameDir(_currentExportDir, "scripts", ".scripts");
-            AssetDatabase.Refresh();
         }
 
         private static void RenameDir(string root, string name, string newName)
