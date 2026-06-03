@@ -248,7 +248,7 @@ namespace Cocokoishi.VRCALoader
             var instance = Instantiate(source);
             if (instance == null) return;
             instance.name = source.name;
-            instance.hideFlags = HideFlags.DontSaveInEditor | HideFlags.DontSaveInBuild;
+            if (!Application.isPlaying) instance.hideFlags = HideFlags.DontSaveInEditor | HideFlags.DontSaveInBuild;
             instance.transform.position = Vector3.zero;
 #if VRC_SDK_VRCSDK3 && !UDON
             StripPipelineManager(instance);
