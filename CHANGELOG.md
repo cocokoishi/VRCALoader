@@ -2,6 +2,17 @@
 
 All notable changes to this package will be documented in this file.
 
+## [0.1.1] - 2026-06-04
+
+### Changed
+- **HIG-compliant AssetRipper launcher.** The bat-file button is now on the action row, renamed to "Start AssetRipper", and driven by server state. When port 6969 is unreachable: a gray dot with a blue primary button signals action is needed. When the server is running: a green dot with a disabled "AssetRipper Running" label replaces it — no clickable affordance, no ambiguity. Removed "from bat" implementation detail from user-facing text.
+
+### Changed
+- Extraction history list now defaults to collapsed; only the most recently exported item expands automatically. Foldout toggles let the user expand or collapse any entry.
+
+### Fixed
+- "Reveal" and "Delete" buttons in extraction history widened slightly to prevent label clipping.
+
 ## [0.1.0] - 2026-06-03
 
 ### Added

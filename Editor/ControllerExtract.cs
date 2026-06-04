@@ -5,7 +5,9 @@ using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Net.Sockets;
 using System.Text;
+using System.Threading;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Networking;
@@ -34,6 +36,8 @@ namespace Cocokoishi.VRCALoader
         private bool _busy;
         private bool _stripNonControllers;
         private IEnumerator _routine;
+        private bool _serverAlive;
+        private double _lastServerCheckTime;
 
         private readonly List<Extraction> _extractions = new List<Extraction>();
 
@@ -41,6 +45,7 @@ namespace Cocokoishi.VRCALoader
         {
             public string folderName;
             public string fullPath;
+            public bool expanded;
             public readonly List<ControllerEntry> controllers = new List<ControllerEntry>();
         }
 
@@ -64,6 +69,7 @@ namespace Cocokoishi.VRCALoader
             if (!string.IsNullOrEmpty(_bundlePath) && !File.Exists(_bundlePath))
                 _bundlePath = "";
             _stripNonControllers = EditorPrefs.GetBool("ControllerExtract_Strip", false);
+            CheckServerAlive();
         }
 
         private void OnDisable()
@@ -128,6 +134,7 @@ namespace Cocokoishi.VRCALoader
 
             // ── Actions ──
             EditorGUILayout.Space(4);
+            CheckServerAlive();
             EditorGUILayout.BeginHorizontal();
 
             bool canExtract = !_busy && !string.IsNullOrEmpty(_bundlePath) && File.Exists(_bundlePath);
@@ -139,11 +146,31 @@ namespace Cocokoishi.VRCALoader
             if (GUILayout.Button(extractLabel, GUILayout.Height(28))) StartExtract();
             GUI.enabled = true;
             if (GUILayout.Button("Refresh List", GUILayout.Height(28))) RefreshExtractions();
-            EditorGUILayout.EndHorizontal();
 
             var batPath = Path.Combine(AssetRipperDir, "startsh/start_assetripper.bat");
-            if (GUILayout.Button("Reveal start_assetripper.bat", EditorStyles.miniButton))
-                EditorUtility.RevealInFinder(batPath);
+            if (!_serverAlive)
+            {
+                GUI.contentColor = Color.gray;
+                GUILayout.Label("●", GUILayout.Width(14), GUILayout.Height(28));
+                GUI.contentColor = Color.white;
+
+                var oldBg = GUI.backgroundColor;
+                GUI.backgroundColor = new Color(0f, 0.48f, 1f);
+                if (GUILayout.Button("Start AssetRipper", GUILayout.Height(28)))
+                    EditorUtility.RevealInFinder(batPath);
+                GUI.backgroundColor = oldBg;
+            }
+            else
+            {
+                GUI.contentColor = new Color(0.2f, 0.78f, 0.35f);
+                GUILayout.Label("●", GUILayout.Width(14), GUILayout.Height(28));
+                GUI.contentColor = Color.white;
+
+                GUI.enabled = false;
+                GUILayout.Button("AssetRipper Running", GUILayout.Height(28));
+                GUI.enabled = true;
+            }
+            EditorGUILayout.EndHorizontal();
 
             if (_busy)
             {
@@ -169,12 +196,12 @@ namespace Cocokoishi.VRCALoader
                 {
                     EditorGUILayout.BeginVertical(GUI.skin.box);
                     EditorGUILayout.BeginHorizontal();
-                    EditorGUILayout.LabelField(ex.folderName, EditorStyles.boldLabel);
+                    ex.expanded = EditorGUILayout.Foldout(ex.expanded, ex.folderName, true, EditorStyles.foldoutHeader);
                     GUILayout.FlexibleSpace();
                     EditorGUILayout.LabelField($"{ex.controllers.Count} controller(s)", EditorStyles.miniLabel);
-                    if (GUILayout.Button("Reveal", EditorStyles.miniButton, GUILayout.Width(52)))
+                    if (GUILayout.Button("Reveal", EditorStyles.miniButton, GUILayout.Width(56)))
                         EditorUtility.RevealInFinder(ex.fullPath);
-                    if (GUILayout.Button("Delete", EditorStyles.miniButton, GUILayout.Width(52)))
+                    if (GUILayout.Button("Delete", EditorStyles.miniButton, GUILayout.Width(56)))
                     {
                         if (EditorUtility.DisplayDialog("Delete Extraction",
                                 $"Delete {ex.folderName}?", "Delete", "Cancel"))
@@ -189,27 +216,30 @@ namespace Cocokoishi.VRCALoader
                     }
                     EditorGUILayout.EndHorizontal();
 
-                    foreach (var c in ex.controllers)
+                    if (ex.expanded)
                     {
-                        EditorGUILayout.BeginHorizontal();
-                        GUILayout.Space(20);
-                        EditorGUILayout.LabelField(c.fileName);
-                        if (GUILayout.Button("Open", EditorStyles.miniButton, GUILayout.Width(44)))
+                        foreach (var c in ex.controllers)
                         {
-                            var relPath = "Assets" + c.filePath
-                                .Substring(Application.dataPath.Length)
-                                .Replace('\\', '/');
-                            EditorApplication.delayCall += () =>
+                            EditorGUILayout.BeginHorizontal();
+                            GUILayout.Space(20);
+                            EditorGUILayout.LabelField(c.fileName);
+                            if (GUILayout.Button("Open", EditorStyles.miniButton, GUILayout.Width(44)))
                             {
-                                try { AssetDatabase.ImportAsset(relPath, ImportAssetOptions.ForceUpdate); } catch { }
-                                var asset = AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(relPath);
-                                if (asset != null) AssetDatabase.OpenAsset(asset);
-                                else EditorUtility.RevealInFinder(c.filePath);
-                            };
+                                var relPath = "Assets" + c.filePath
+                                    .Substring(Application.dataPath.Length)
+                                    .Replace('\\', '/');
+                                EditorApplication.delayCall += () =>
+                                {
+                                    try { AssetDatabase.ImportAsset(relPath, ImportAssetOptions.ForceUpdate); } catch { }
+                                    var asset = AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(relPath);
+                                    if (asset != null) AssetDatabase.OpenAsset(asset);
+                                    else EditorUtility.RevealInFinder(c.filePath);
+                                };
+                            }
+                            if (GUILayout.Button("Reveal", EditorStyles.miniButton, GUILayout.Width(48)))
+                                EditorUtility.RevealInFinder(c.filePath);
+                            EditorGUILayout.EndHorizontal();
                         }
-                        if (GUILayout.Button("Reveal", EditorStyles.miniButton, GUILayout.Width(48)))
-                            EditorUtility.RevealInFinder(c.filePath);
-                        EditorGUILayout.EndHorizontal();
                     }
                     EditorGUILayout.EndVertical();
                 }
@@ -348,9 +378,12 @@ namespace Cocokoishi.VRCALoader
 
             if (!alive)
             {
-                _status = "AssetRipper is not running. Click \"Reveal start_assetripper.bat\", double-click it, then come back and click Extract again.";
+                _serverAlive = false;
+                _status = "AssetRipper is not running. Click \"Start AssetRipper\", double-click the .bat file, then come back and click Extract.";
                 yield break;
             }
+
+            _serverAlive = true;
 
             // ── Load bundle ──
             PrepareExportDir();
@@ -455,6 +488,29 @@ namespace Cocokoishi.VRCALoader
 
         // ── Helpers ────────────────────────────────────────
 
+        private void CheckServerAlive()
+        {
+            if (EditorApplication.timeSinceStartup - _lastServerCheckTime < 3.0) return;
+            _lastServerCheckTime = EditorApplication.timeSinceStartup;
+            ThreadPool.QueueUserWorkItem(_ =>
+            {
+                try
+                {
+                    using (var client = new TcpClient())
+                    {
+                        var result = client.BeginConnect("127.0.0.1", RipPort, null, null);
+                        if (result.AsyncWaitHandle.WaitOne(500))
+                        {
+                            try { client.EndConnect(result); _serverAlive = true; }
+                            catch { _serverAlive = false; }
+                        }
+                        else _serverAlive = false;
+                    }
+                }
+                catch { _serverAlive = false; }
+            });
+        }
+
         private void PrepareExportDir()
         {
             if (!Directory.Exists(ExportsRoot))
@@ -476,7 +532,7 @@ namespace Cocokoishi.VRCALoader
                 var files = Directory.GetFiles(dir, "*.controller", SearchOption.AllDirectories)
                     .Where(f => !f.EndsWith(".meta")).ToArray();
 
-                var ex = new Extraction { folderName = name, fullPath = dir };
+                var ex = new Extraction { folderName = name, fullPath = dir, expanded = dir == _currentExportDir };
                 foreach (var f in files)
                     ex.controllers.Add(new ControllerEntry { filePath = f, fileName = Path.GetFileName(f) });
                 _extractions.Add(ex);
