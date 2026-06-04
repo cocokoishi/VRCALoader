@@ -91,7 +91,7 @@ namespace Cocokoishi.VRCALoader
             // ── Options ──
             var prevStrip = _stripNonControllers;
             _stripNonControllers = EditorGUILayout.ToggleLeft(
-                "After export, delete all folders except AnimatorController",
+                "After export, delete all folders except Animators",
                 _stripNonControllers);
             if (_stripNonControllers != prevStrip)
                 EditorPrefs.SetBool("ControllerExtract_Strip", _stripNonControllers);
@@ -464,7 +464,9 @@ namespace Cocokoishi.VRCALoader
                 foreach (var d in Directory.GetDirectories(_currentExportDir))
                 {
                     var name = Path.GetFileName(d);
-                    if (name.Equals("AnimatorController", StringComparison.OrdinalIgnoreCase)) continue;
+                    if (name.Equals("AnimatorController", StringComparison.OrdinalIgnoreCase) ||
+                        name.Equals("AnimationClip", StringComparison.OrdinalIgnoreCase) ||
+                        name.Equals("AnimatorState", StringComparison.OrdinalIgnoreCase)) continue;
                     try { Directory.Delete(d, true); }
                     catch (Exception e) { UnityEngine.Debug.LogWarning($"[ControllerExtract] Could not delete {name}: {e.Message}"); }
                 }
