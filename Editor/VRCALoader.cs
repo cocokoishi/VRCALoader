@@ -270,7 +270,7 @@ namespace Cocokoishi.VRCALoader
         private static void StripPipelineManager(GameObject root)
         {
             foreach (var pm in root.GetComponentsInChildren<VRC.Core.PipelineManager>(true))
-                DestroyImmediate(pm);
+                DestroyImmediate(pm, true);
         }
 
         // AnimatorControllers extracted from a VRChat AssetBundle have their editor

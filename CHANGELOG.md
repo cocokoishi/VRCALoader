@@ -2,6 +2,12 @@
 
 All notable changes to this package will be documented in this file.
 
+## [0.1.2] - 2026-06-05
+
+### Fixed
+- Loading a bundle no longer logs "Destroying assets is not permitted to avoid data loss" for every avatar. `StripPipelineManager` also runs on the asset bodies returned by `LoadAllAssetsAsync`, which Unity treats as assets, so the `DestroyImmediate` call now passes `allowDestroyingAssets: true`. These are transient bundle objects (hidden from save/build) with no backing file, so nothing on disk is affected.
+- Deleting an entry in Controller Extract no longer throws "Invalid GUILayout state". The delete handler used to remove the item and `break` out of the draw loop between `BeginHorizontal`/`BeginVertical` and their matching `End` calls, leaving layout groups unclosed. Deletion is now deferred until after the scroll view closes.
+
 ## [0.1.1] - 2026-06-04
 
 ### Changed

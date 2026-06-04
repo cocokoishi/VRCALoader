@@ -191,6 +191,7 @@ namespace Cocokoishi.VRCALoader
             }
             else
             {
+                Extraction toDelete = null;
                 _scroll = EditorGUILayout.BeginScrollView(_scroll);
                 foreach (var ex in _extractions)
                 {
@@ -205,14 +206,7 @@ namespace Cocokoishi.VRCALoader
                     {
                         if (EditorUtility.DisplayDialog("Delete Extraction",
                                 $"Delete {ex.folderName}?", "Delete", "Cancel"))
-                        {
-                            if (Directory.Exists(ex.fullPath)) Directory.Delete(ex.fullPath, true);
-                            var meta = ex.fullPath + ".meta";
-                            if (File.Exists(meta)) File.Delete(meta);
-                            _extractions.Remove(ex);
-                            AssetDatabase.Refresh();
-                            break;
-                        }
+                            toDelete = ex;
                     }
                     EditorGUILayout.EndHorizontal();
 
@@ -236,7 +230,7 @@ namespace Cocokoishi.VRCALoader
                                     else EditorUtility.RevealInFinder(c.filePath);
                                 };
                             }
-                            if (GUILayout.Button("Reveal", EditorStyles.miniButton, GUILayout.Width(48)))
+                            if (GUILayout.Button("Reveal", EditorStyles.miniButton, GUILayout.Width(56)))
                                 EditorUtility.RevealInFinder(c.filePath);
                             EditorGUILayout.EndHorizontal();
                         }
@@ -244,6 +238,15 @@ namespace Cocokoishi.VRCALoader
                     EditorGUILayout.EndVertical();
                 }
                 EditorGUILayout.EndScrollView();
+
+                if (toDelete != null)
+                {
+                    if (Directory.Exists(toDelete.fullPath)) Directory.Delete(toDelete.fullPath, true);
+                    var meta = toDelete.fullPath + ".meta";
+                    if (File.Exists(meta)) File.Delete(meta);
+                    _extractions.Remove(toDelete);
+                    AssetDatabase.Refresh();
+                }
             }
 
             GUILayout.FlexibleSpace();
