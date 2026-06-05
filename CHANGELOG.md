@@ -4,9 +4,14 @@ All notable changes to this package will be documented in this file.
 
 ## [0.1.2] - 2026-06-05
 
+### Changed
+- The AssetRipper download now reports live progress (`Downloading AssetRipper... NN%`) instead of a static "Downloading..." label, so the ~120 MB first-run download no longer looks frozen.
+
 ### Fixed
 - Loading a bundle no longer logs "Destroying assets is not permitted to avoid data loss" for every avatar. `StripPipelineManager` also runs on the asset bodies returned by `LoadAllAssetsAsync`, which Unity treats as assets, so the `DestroyImmediate` call now passes `allowDestroyingAssets: true`. These are transient bundle objects (hidden from save/build) with no backing file, so nothing on disk is affected.
 - Deleting an entry in Controller Extract no longer throws "Invalid GUILayout state". The delete handler used to remove the item and `break` out of the draw loop between `BeginHorizontal`/`BeginVertical` and their matching `End` calls, leaving layout groups unclosed. Deletion is now deferred until after the scroll view closes.
+- Controller extraction could request the export before AssetRipper finished loading the bundle. The one-second settle between `/LoadFile` and `/Export/UnityProject` used `WaitForSecondsRealtime`, which has no effect here: the extraction `IEnumerator` is driven by manual `MoveNext()` calls from `EditorApplication.update`, not Unity's coroutine scheduler, so it resumed on the very next editor tick instead of pausing. The delay now polls `EditorApplication.timeSinceStartup`, so the export waits the intended interval.
+- The AssetRipper server-status dot could show a stale state. `CheckServerAlive` probes port 6969 on a `ThreadPool` worker and writes `_serverAlive`, which `OnGUI` reads on the main thread without a memory barrier; the field is now `volatile` so the GUI reliably observes the latest probe result.
 
 ## [0.1.1] - 2026-06-04
 

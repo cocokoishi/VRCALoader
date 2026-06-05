@@ -36,7 +36,9 @@ namespace Cocokoishi.VRCALoader
         private bool _busy;
         private bool _stripNonControllers;
         private IEnumerator _routine;
-        private bool _serverAlive;
+        // Written from a ThreadPool worker in CheckServerAlive and read on the main
+        // thread in OnGUI — volatile guarantees the GUI sees the latest probe result.
+        private volatile bool _serverAlive;
         private double _lastServerCheckTime;
 
         private readonly List<Extraction> _extractions = new List<Extraction>();
@@ -78,6 +80,8 @@ namespace Cocokoishi.VRCALoader
             EditorPrefs.SetBool("ControllerExtract_Strip", _stripNonControllers);
             EditorApplication.update -= Pump;
             _routine = null;
+            // Balance StartExtract's DisallowAutoRefresh if the window closes mid-extraction.
+            if (_busy) AssetDatabase.AllowAutoRefresh();
             _busy = false;
         }
 
@@ -329,7 +333,11 @@ namespace Cocokoishi.VRCALoader
                     var dh = new DownloadHandlerFile(zipPath) { removeFileOnAbort = true };
                     req.downloadHandler = dh;
                     var op = req.SendWebRequest();
-                    while (!op.isDone) yield return null;
+                    while (!op.isDone)
+                    {
+                        _status = $"Downloading AssetRipper... {req.downloadProgress * 100f:0}%";
+                        yield return null;
+                    }
                     if (req.result != UnityWebRequest.Result.Success)
                     { _status = $"Download failed: {req.error}"; yield break; }
                 }
@@ -411,7 +419,12 @@ namespace Cocokoishi.VRCALoader
             }
 
             _status = "Bundle loaded. Exporting...";
-            yield return new WaitForSecondsRealtime(1f);
+            // This routine is driven by manual MoveNext() in Pump, not Unity's coroutine
+            // scheduler, so yielding a WaitForSecondsRealtime would resume on the very next
+            // tick instead of waiting. Poll realtime explicitly to give AssetRipper a real
+            // moment to finish loading before we request the export.
+            var settleUntil = EditorApplication.timeSinceStartup + 1.0;
+            while (EditorApplication.timeSinceStartup < settleUntil) yield return null;
 
             // ── Export ──
             {
