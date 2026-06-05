@@ -123,18 +123,13 @@ namespace Cocokoishi.VRCALoader
             if (newIdx != _selectedIndex && newIdx >= 0 && newIdx < BundlePaths.Length)
             { _selectedIndex = newIdx; _bundlePath = BundlePaths[_selectedIndex]; }
 
-            if (GUILayout.Button("Browse", GUILayout.Width(64)))
-            {
-                var p = EditorUtility.OpenFilePanel("Select VRCA / VRCW", "", "");
-                if (!string.IsNullOrEmpty(p)) { _bundlePath = p; _selectedIndex = -1; }
-            }
             EditorGUILayout.EndHorizontal();
 
             // Show current path (persists across domain reloads)
             if (!string.IsNullOrEmpty(_bundlePath))
                 EditorGUILayout.LabelField(Path.GetFileName(_bundlePath), EditorStyles.miniLabel);
             else if (BundlePaths.Length == 0)
-                EditorGUILayout.LabelField("Open VRCALoader first, or use Browse", EditorStyles.centeredGreyMiniLabel);
+                EditorGUILayout.LabelField("Open VRCALoader first", EditorStyles.centeredGreyMiniLabel);
 
             // ── Actions ──
             EditorGUILayout.Space(4);
@@ -311,59 +306,7 @@ namespace Cocokoishi.VRCALoader
 
         private IEnumerator ExtractRoutine()
         {
-            // ── Ensure AssetRipper exists ──
-            if (!File.Exists(AssetRipperExe))
-            {
-                if (!EditorUtility.DisplayDialog("AssetRipper Required",
-                        "AssetRipper is not installed. Download ~120 MB from GitHub?\n\n(You only need to do this once.)",
-                        "Download", "Cancel"))
-                {
-                    _status = "AssetRipper is required. Download cancelled.";
-                    yield break;
-                }
-
-                _status = "Downloading AssetRipper...";
-                yield return null;
-
-                var zipPath = Path.Combine(AssetRipperDir, "AssetRipper_win_x64.zip");
-                if (!Directory.Exists(AssetRipperDir)) Directory.CreateDirectory(AssetRipperDir);
-
-                using (var req = UnityWebRequest.Get(DownloadUrl))
-                {
-                    var dh = new DownloadHandlerFile(zipPath) { removeFileOnAbort = true };
-                    req.downloadHandler = dh;
-                    var op = req.SendWebRequest();
-                    while (!op.isDone)
-                    {
-                        _status = $"Downloading AssetRipper... {req.downloadProgress * 100f:0}%";
-                        yield return null;
-                    }
-                    if (req.result != UnityWebRequest.Result.Success)
-                    { _status = $"Download failed: {req.error}"; yield break; }
-                }
-
-                _status = "Extracting...";
-                yield return null;
-                ZipFile.ExtractToDirectory(zipPath, AssetRipperDir, true);
-                File.Delete(zipPath);
-
-                if (!File.Exists(AssetRipperExe))
-                { _status = "Extraction complete but exe not found."; yield break; }
-
-                // Auto-generate the start script
-                var startshDir = Path.Combine(AssetRipperDir, "startsh");
-                if (!Directory.Exists(startshDir)) Directory.CreateDirectory(startshDir);
-                File.WriteAllText(Path.Combine(startshDir, "start_assetripper.bat"),
-                    "@echo off\r\ncd /d \"%~dp0..\"\r\n" +
-                    "echo AssetRipper on http://localhost:6969\r\n" +
-                    "echo Close this window to stop.\r\n" +
-                    "AssetRipper.GUI.Free.exe --port 6969\r\n");
-
-                _status = "AssetRipper installed. Run start_assetripper.bat, then click Extract again.";
-                yield break;
-            }
-
-            // ── Check AssetRipper is running (user must start it manually) ──
+            // ── Check if AssetRipper server is already running ──
             var baseUrl = $"http://localhost:{RipPort}";
             _status = "Checking AssetRipper server...";
             yield return null;
@@ -374,22 +317,74 @@ namespace Cocokoishi.VRCALoader
                 req.timeout = 5;
                 var op = req.SendWebRequest();
                 while (!op.isDone) yield return null;
-                // Any response (even error) means the server is running
                 alive = req.result != UnityWebRequest.Result.ConnectionError;
                 if (!alive)
                 {
-                    // try /api/health
-                    using var req2 = UnityWebRequest.Get(baseUrl + "/api/health");
-                    req2.timeout = 3;
-                    var op2 = req2.SendWebRequest();
+                    using var healthReq = UnityWebRequest.Get(baseUrl + "/api/health");
+                    healthReq.timeout = 3;
+                    var op2 = healthReq.SendWebRequest();
                     while (!op2.isDone) yield return null;
-                    alive = req2.result != UnityWebRequest.Result.ConnectionError;
+                    alive = healthReq.result != UnityWebRequest.Result.ConnectionError;
                 }
             }
 
             if (!alive)
             {
                 _serverAlive = false;
+
+                // Server not running → check if AssetRipper is installed locally
+                if (!File.Exists(AssetRipperExe))
+                {
+                    if (!EditorUtility.DisplayDialog("AssetRipper Required",
+                            "AssetRipper is not installed. Download ~120 MB from GitHub?\n\n(You only need to do this once.)",
+                            "Download", "Cancel"))
+                    {
+                        _status = "AssetRipper is required. Download cancelled.";
+                        yield break;
+                    }
+
+                    _status = "Downloading AssetRipper...";
+                    yield return null;
+
+                    var zipPath = Path.Combine(AssetRipperDir, "AssetRipper_win_x64.zip");
+                    if (!Directory.Exists(AssetRipperDir)) Directory.CreateDirectory(AssetRipperDir);
+
+                    using (var dlReq = UnityWebRequest.Get(DownloadUrl))
+                    {
+                        var dh = new DownloadHandlerFile(zipPath) { removeFileOnAbort = true };
+                        dlReq.downloadHandler = dh;
+                        var op2 = dlReq.SendWebRequest();
+                        while (!op2.isDone)
+                        {
+                            _status = $"Downloading AssetRipper... {dlReq.downloadProgress * 100f:0}%";
+                            yield return null;
+                        }
+                        if (dlReq.result != UnityWebRequest.Result.Success)
+                        { _status = $"Download failed: {dlReq.error}"; yield break; }
+                    }
+
+                    _status = "Extracting...";
+                    yield return null;
+                    ZipFile.ExtractToDirectory(zipPath, AssetRipperDir, true);
+                    File.Delete(zipPath);
+
+                    if (!File.Exists(AssetRipperExe))
+                    { _status = "Extraction complete but exe not found."; yield break; }
+
+                    // Auto-generate the start script
+                    var startshDir = Path.Combine(AssetRipperDir, "startsh");
+                    if (!Directory.Exists(startshDir)) Directory.CreateDirectory(startshDir);
+                    File.WriteAllText(Path.Combine(startshDir, "start_assetripper.bat"),
+                        "@echo off\r\ncd /d \"%~dp0..\"\r\n" +
+                        "echo AssetRipper on http://localhost:6969\r\n" +
+                        "echo Close this window to stop.\r\n" +
+                        "AssetRipper.GUI.Free.exe --port 6969\r\n");
+
+                    _status = "AssetRipper installed. Run start_assetripper.bat, then click Extract again.";
+                    yield break;
+                }
+
+                // Installed but not running
                 _status = "AssetRipper is not running. Click \"Start AssetRipper\", double-click the .bat file, then come back and click Extract.";
                 yield break;
             }

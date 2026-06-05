@@ -2,6 +2,14 @@
 
 All notable changes to this package will be documented in this file.
 
+## [0.1.3] - 2026-06-05
+
+### Changed
+- **Server-first extraction check.** Controller Extract now probes port 6969 before checking for a local AssetRipper installation. If AssetRipper is already running (regardless of where it was installed), extraction proceeds immediately — no download prompt, no local-exe check. The installation fallback only triggers when the server is unreachable.
+
+### Removed
+- **Browse button** from the Controller Extract source selector. Bundle selection is handled by VRCALoader's slot system; the manual file browser was unused and misleading.
+
 ## [0.1.2] - 2026-06-05
 
 ### Changed
