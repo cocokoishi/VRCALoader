@@ -146,7 +146,6 @@ namespace Cocokoishi.VRCALoader
             GUI.enabled = true;
             if (GUILayout.Button("Refresh List", GUILayout.Height(28))) RefreshExtractions();
 
-            var batPath = Path.Combine(AssetRipperDir, "startsh/start_assetripper.bat");
             if (!_serverAlive)
             {
                 GUI.contentColor = Color.gray;
@@ -155,8 +154,9 @@ namespace Cocokoishi.VRCALoader
 
                 var oldBg = GUI.backgroundColor;
                 GUI.backgroundColor = new Color(0f, 0.48f, 1f);
+                GUI.enabled = !_busy;
                 if (GUILayout.Button("Start AssetRipper", GUILayout.Height(28)))
-                    EditorUtility.RevealInFinder(batPath);
+                    StartAssetRipper();
                 GUI.backgroundColor = oldBg;
             }
             else
@@ -271,6 +271,98 @@ namespace Cocokoishi.VRCALoader
             Repaint();
         }
 
+        private void StartAssetRipper()
+        {
+            if (_busy) return;
+            _busy = true;
+            _routine = StartAssetRipperRoutine();
+            EditorApplication.update += Pump;
+            Repaint();
+        }
+
+        private IEnumerator StartAssetRipperRoutine()
+        {
+            var installRoutine = EnsureInstalledRoutine();
+            while (installRoutine.MoveNext()) yield return installRoutine.Current;
+
+            if (!File.Exists(AssetRipperExe))
+            {
+                // User cancelled or install failed — status already set by EnsureInstalledRoutine
+                yield break;
+            }
+
+            // Always recreate bat + folder on every click
+            EnsureBatExists();
+
+            var batPath = Path.Combine(AssetRipperDir, "startsh/start_assetripper.bat");
+            EditorUtility.RevealInFinder(batPath);
+            _status = "AssetRipper .bat opened in Explorer. Double-click it to start.";
+        }
+
+        /// <summary>Shared install check — if exe is missing, prompts → downloads → extracts.
+        /// After this completes, either AssetRipperExe exists or the user cancelled.</summary>
+        private IEnumerator EnsureInstalledRoutine()
+        {
+            if (File.Exists(AssetRipperExe))
+            {
+                // Still ensure the bat is present (may have been deleted)
+                EnsureBatExists();
+                yield break;
+            }
+
+            if (!EditorUtility.DisplayDialog("AssetRipper Required",
+                    "AssetRipper is not installed. Download ~120 MB from GitHub?\n\n(You only need to do this once.)",
+                    "Download", "Cancel"))
+            {
+                _status = "AssetRipper is required. Download cancelled.";
+                yield break;
+            }
+
+            _status = "Downloading AssetRipper...";
+            yield return null;
+
+            var zipPath = Path.Combine(AssetRipperDir, "AssetRipper_win_x64.zip");
+            if (!Directory.Exists(AssetRipperDir)) Directory.CreateDirectory(AssetRipperDir);
+
+            using (var dlReq = UnityWebRequest.Get(DownloadUrl))
+            {
+                var dh = new DownloadHandlerFile(zipPath) { removeFileOnAbort = true };
+                dlReq.downloadHandler = dh;
+                var op = dlReq.SendWebRequest();
+                while (!op.isDone)
+                {
+                    _status = $"Downloading AssetRipper... {dlReq.downloadProgress * 100f:0}%";
+                    yield return null;
+                }
+                if (dlReq.result != UnityWebRequest.Result.Success)
+                { _status = $"Download failed: {dlReq.error}"; yield break; }
+            }
+
+            _status = "Extracting...";
+            yield return null;
+            ZipFile.ExtractToDirectory(zipPath, AssetRipperDir, true);
+            File.Delete(zipPath);
+
+            if (!File.Exists(AssetRipperExe))
+            { _status = "Extraction complete but exe not found."; yield break; }
+
+            EnsureBatExists();
+            _status = "AssetRipper installed.";
+        }
+
+        /// <summary>Ensure the startsh folder and start_assetripper.bat exist.
+        /// Safe to call repeatedly — overwrites the .bat each time.</summary>
+        private static void EnsureBatExists()
+        {
+            var startshDir = Path.Combine(AssetRipperDir, "startsh");
+            if (!Directory.Exists(startshDir)) Directory.CreateDirectory(startshDir);
+            File.WriteAllText(Path.Combine(startshDir, "start_assetripper.bat"),
+                "@echo off\r\ncd /d \"%~dp0..\"\r\n" +
+                "echo AssetRipper on http://localhost:6969\r\n" +
+                "echo Close this window to stop.\r\n" +
+                "AssetRipper.GUI.Free.exe --port 6969\r\n");
+        }
+
         private void Pump()
         {
             if (_routine == null || !this)
@@ -332,60 +424,18 @@ namespace Cocokoishi.VRCALoader
             {
                 _serverAlive = false;
 
-                // Server not running → check if AssetRipper is installed locally
+                // Ensure AssetRipper is installed (shared with StartAssetRipper)
+                var installRoutine = EnsureInstalledRoutine();
+                while (installRoutine.MoveNext()) yield return installRoutine.Current;
+
                 if (!File.Exists(AssetRipperExe))
                 {
-                    if (!EditorUtility.DisplayDialog("AssetRipper Required",
-                            "AssetRipper is not installed. Download ~120 MB from GitHub?\n\n(You only need to do this once.)",
-                            "Download", "Cancel"))
-                    {
-                        _status = "AssetRipper is required. Download cancelled.";
-                        yield break;
-                    }
-
-                    _status = "Downloading AssetRipper...";
-                    yield return null;
-
-                    var zipPath = Path.Combine(AssetRipperDir, "AssetRipper_win_x64.zip");
-                    if (!Directory.Exists(AssetRipperDir)) Directory.CreateDirectory(AssetRipperDir);
-
-                    using (var dlReq = UnityWebRequest.Get(DownloadUrl))
-                    {
-                        var dh = new DownloadHandlerFile(zipPath) { removeFileOnAbort = true };
-                        dlReq.downloadHandler = dh;
-                        var op2 = dlReq.SendWebRequest();
-                        while (!op2.isDone)
-                        {
-                            _status = $"Downloading AssetRipper... {dlReq.downloadProgress * 100f:0}%";
-                            yield return null;
-                        }
-                        if (dlReq.result != UnityWebRequest.Result.Success)
-                        { _status = $"Download failed: {dlReq.error}"; yield break; }
-                    }
-
-                    _status = "Extracting...";
-                    yield return null;
-                    ZipFile.ExtractToDirectory(zipPath, AssetRipperDir, true);
-                    File.Delete(zipPath);
-
-                    if (!File.Exists(AssetRipperExe))
-                    { _status = "Extraction complete but exe not found."; yield break; }
-
-                    // Auto-generate the start script
-                    var startshDir = Path.Combine(AssetRipperDir, "startsh");
-                    if (!Directory.Exists(startshDir)) Directory.CreateDirectory(startshDir);
-                    File.WriteAllText(Path.Combine(startshDir, "start_assetripper.bat"),
-                        "@echo off\r\ncd /d \"%~dp0..\"\r\n" +
-                        "echo AssetRipper on http://localhost:6969\r\n" +
-                        "echo Close this window to stop.\r\n" +
-                        "AssetRipper.GUI.Free.exe --port 6969\r\n");
-
-                    _status = "AssetRipper installed. Run start_assetripper.bat, then click Extract again.";
+                    // User cancelled download or install failed
                     yield break;
                 }
 
-                // Installed but not running
-                _status = "AssetRipper is not running. Click \"Start AssetRipper\", double-click the .bat file, then come back and click Extract.";
+                // Installed but server not running
+                _status = "AssetRipper is not running. Double-click start_assetripper.bat, then click Extract again.";
                 yield break;
             }
 
