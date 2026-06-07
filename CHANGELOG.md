@@ -2,6 +2,14 @@
 
 All notable changes to this package will be documented in this file.
 
+## [0.1.4] - 2026-06-07
+
+### Changed
+- **AssetRipper install logic refactored.** The download-and-install flow is now a shared `EnsureInstalledRoutine` used by both "Start AssetRipper" and "Extract Bundle". Previously "Start AssetRipper" blindly called `EditorUtility.RevealInFinder` to a non-existent `.bat` path when AssetRipper was not installed, opening Explorer to an irrelevant location. Now both buttons trigger the install dialog when AssetRipper is missing, and the `startsh` folder plus `.bat` file are recreated on every "Start AssetRipper" click.
+
+### Added
+- **First-time file browser defaults to VRChat Avatars folder.** On the very first use of any slot's browse ("...") button, the file open dialog starts at `AppData/LocalLow/VRChat/VRChat/Avatars`. All subsequent opens use the OS default (last-used folder). The flag persists in `vrcaloader-settings.json`.
+
 ## [0.1.3] - 2026-06-05
 
 ### Changed
