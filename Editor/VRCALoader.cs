@@ -41,6 +41,12 @@ namespace Cocokoishi.VRCALoader
         private static readonly Color BadgeFg = new Color(1f, 0.604f, 0f);
         private static Texture2D _badgeTex;
 
+        private static readonly string VrchatAvatarsDir = Path.GetFullPath(Path.Combine(
+            Path.Combine(Path.GetDirectoryName(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData)) ?? "",
+                "LocalLow"),
+            "VRChat/VRChat/Avatars"));
+
         [MenuItem("Tools/VRCALoader")]
         public static void ShowWindow()
         {
@@ -97,7 +103,10 @@ namespace Cocokoishi.VRCALoader
         {
             public int slotCount = 1;
             public List<string> paths = new List<string>();
+            public bool hasOpenedBrowser;
         }
+
+        private bool _hasOpenedBrowser;
 
         private void LoadState()
         {
@@ -115,6 +124,7 @@ namespace Cocokoishi.VRCALoader
                 if (data == null) { _slotCount = 1; _slots.Add(new BundleSlot()); return; }
 
                 _slotCount = Mathf.Clamp(data.slotCount, 0, 32);
+                _hasOpenedBrowser = data.hasOpenedBrowser;
                 if (data.paths != null)
                     foreach (var p in data.paths) _slots.Add(new BundleSlot { path = p ?? "" });
                 while (_slots.Count < _slotCount) _slots.Add(new BundleSlot());
@@ -131,7 +141,7 @@ namespace Cocokoishi.VRCALoader
         {
             try
             {
-                var data = new SettingsData { slotCount = _slotCount, paths = new List<string>(_slots.Count) };
+                var data = new SettingsData { slotCount = _slotCount, hasOpenedBrowser = _hasOpenedBrowser, paths = new List<string>(_slots.Count) };
                 foreach (var s in _slots) data.paths.Add(s.path ?? "");
                 var dir = Path.GetDirectoryName(SettingsPath);
                 if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
@@ -395,8 +405,21 @@ namespace Cocokoishi.VRCALoader
             if (EditorGUI.EndChangeCheck()) SaveState();
             if (GUILayout.Button("...", EditorStyles.miniButton, GUILayout.Width(24), GUILayout.Height(18)))
             {
-                var p = EditorUtility.OpenFilePanel("Select VRCA / VRCW", "", "");
-                if (!string.IsNullOrEmpty(p)) { slot.path = p; SaveState(); GUI.FocusControl(null); }
+                var defaultDir = _hasOpenedBrowser ? "" :
+                    Directory.Exists(VrchatAvatarsDir) ? VrchatAvatarsDir : "";
+                var p = EditorUtility.OpenFilePanel("Select VRCA / VRCW", defaultDir, "");
+                if (!string.IsNullOrEmpty(p))
+                {
+                    slot.path = p;
+                    _hasOpenedBrowser = true;
+                    SaveState();
+                    GUI.FocusControl(null);
+                }
+                else if (!_hasOpenedBrowser)
+                {
+                    _hasOpenedBrowser = true;
+                    SaveState();
+                }
             }
             var oldBg = GUI.backgroundColor;
             GUI.backgroundColor = Color.red;
