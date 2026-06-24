@@ -156,10 +156,6 @@ jobs:
           body: |
             ## Install
 
-            **VPM (recommended):** add this repo to VCC, or unzip
-            `${{ env.PACKAGE_NAME }}-${{ steps.ver.outputs.version }}.zip`
-            into `Packages/${{ env.PACKAGE_NAME }}/`.
-
             **Classic (.unitypackage):** drag
             `${{ env.PACKAGE_NAME }}-${{ steps.ver.outputs.version }}.unitypackage`
             into your open Unity project. Files land under
