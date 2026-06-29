@@ -24,7 +24,7 @@ namespace Cocokoishi.VRCALoader
 
         private const string DownloadUrl =
             "https://github.com/AssetRipper/AssetRipper/releases/download/1.3.14/AssetRipper_win_x64.zip";
-        private const int RipPort = 6969;
+        private const int RipPort = 55510;
 
         public static string[] BundlePaths = Array.Empty<string>();
 
@@ -358,9 +358,9 @@ namespace Cocokoishi.VRCALoader
             if (!Directory.Exists(startshDir)) Directory.CreateDirectory(startshDir);
             File.WriteAllText(Path.Combine(startshDir, "start_assetripper.bat"),
                 "@echo off\r\ncd /d \"%~dp0..\"\r\n" +
-                "echo AssetRipper on http://localhost:6969\r\n" +
+                "echo AssetRipper on http://localhost:55510\r\n" +
                 "echo Close this window to stop.\r\n" +
-                "AssetRipper.GUI.Free.exe --port 6969\r\n");
+                "AssetRipper.GUI.Free.exe --port 55510\r\n");
         }
 
         private void Pump()
