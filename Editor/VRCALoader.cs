@@ -515,10 +515,10 @@ namespace Cocokoishi.VRCALoader
         private void DrawFooter()
         {
             EditorGUILayout.Space(4);
-            if (GUILayout.Button("Extract All Assets/Controller", GUILayout.Height(22)))
+            if (GUILayout.Button("Extract All Assets&Controller", GUILayout.Height(22)))
                 ControllerExtract.Open();
 #if VRC_SDK_VRCSDK3
-            if (GUILayout.Button("Download VRCA", GUILayout.Height(22)))
+            if (GUILayout.Button("Download VRCA&VRCW", GUILayout.Height(22)))
                 VRCADownloadWindow.Open();
 #endif
             EditorGUILayout.BeginHorizontal(EditorStyles.toolbar);
