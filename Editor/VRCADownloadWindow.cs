@@ -125,7 +125,7 @@ namespace Cocokoishi.VRCALoader
                 RefreshCloud();
             EditorGUI.EndDisabledGroup();
 
-            if (GUILayout.Button("Folder", EditorStyles.toolbarButton, GUILayout.Width(78)))
+            if (GUILayout.Button("Open Folder", EditorStyles.toolbarButton, GUILayout.Width(86)))
             {
                 Directory.CreateDirectory(DownloadRoot);
                 EditorUtility.RevealInFinder(DownloadRoot);
