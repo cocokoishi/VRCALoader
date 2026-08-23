@@ -1,6 +1,6 @@
 Load VRCA/VRCW AssetBundle files directly into the Unity Editor for avatar inspection and recovery.
 
-> **Warning:** This tool is meant for recovering your own avatars only.
+> **Warning:** This tool is intended for recovering your own avatars and worlds only. Do not use it on content you do not own or have explicit permission to access.
 
 ### 1. Installation & Usage
 Install via unitypackage from our latest releases. Open it via **Tools > VRCALoader**. Select a `.vrca` or `.vrcw` file in a slot, click **Load**, then double-click any asset or click **Spawn** to instantiate it into the scene.
@@ -11,7 +11,7 @@ The tool calls `AssetBundle.LoadFromFileAsync`, `LoadAllAssetsAsync`, and `Objec
 ### 3. Use Cases
 
 * **3.1 Recovering a local build** — If you lost your project files but still have the cached VRCA, find it under `C:\Users\<YourUsername>\AppData\LocalLow\VRChat\VRChat\Avatars` and load it with this tool. You can inspect blendshape values, shader parameters, and more. The loaded data lives in memory only and cannot be re-uploaded; use it as a reference to manually recreate your work. [unity-blendshape-to-json](https://github.com/cocokoishi/unity-blendshape-to-json) can help migrate blendshape data.
-* **3.2 Recovering from the cloud** — If local files are gone, use [dVRC](https://github.com/200Tigersbloxed/dVRC) to re-download your cloud-uploaded VRCA via VRChat's permitted APIs, then load it here.
+* **3.2 Recovering from the cloud** — Log in through the VRChat SDK Control Panel, open VRCALoader, and click **Download VRCA**. Choose **Cloud Avatars** or **Cloud Worlds**, select a target platform, and click **Download**. A build picker opens with the newest build for that platform selected by default; select another build when needed. Avatars are saved as `.vrca` and worlds as `.vrcw` under `Assets/VRCALoader/VRCA/`. The **Downloaded** tab can reveal or delete local files and add one directly to a loader slot. An empty slot is reused automatically, or a new slot is created when needed.
 
 ### 4. Controller Extract
 AnimatorControllers inside a VRCA bundle are stripped of editor-layer data and state-graph layout information, so Unity's Animator window cannot open them. The **Controller Extract** window (opened from the VRCALoader footer) works around this by driving [AssetRipper](https://github.com/AssetRipper/AssetRipper) to unpack the bundle and produce readable `.controller` files. AssetRipper is auto-downloaded on first use.

@@ -69,11 +69,12 @@ namespace Cocokoishi.VRCALoader
 
             EditorGUILayout.LabelField("3.2 Cloud Recovery", boldLabel);
             EditorGUILayout.LabelField(
-                "Log in through the VRChat SDK Control Panel, then click Download VRCA at the bottom of the " +
-                "VRCALoader window. Select one of your uploaded avatars or worlds and its target platform, then " +
-                "click Download. Avatars are saved as .vrca and worlds as .vrcw. Downloaded files are listed in " +
-                "the same window and can be placed directly into an empty loader slot with Add to Slot; a new " +
-                "slot is created automatically when needed.",
+                "Log in through the VRChat SDK Control Panel, open VRCALoader, and click Download VRCA. " +
+                "Choose Cloud Avatars or Cloud Worlds, select a target platform, and click Download. A build " +
+                "picker opens with the newest build for that platform selected by default; select another build " +
+                "when needed. Avatars are saved as .vrca and worlds as .vrcw under Assets/VRCALoader/VRCA/. " +
+                "The Downloaded tab can reveal or delete local files and add one directly to a loader slot. " +
+                "An empty slot is reused automatically, or a new slot is created when needed.",
                 richLabel);
             EditorGUILayout.Space(6);
 
