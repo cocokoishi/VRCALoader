@@ -517,6 +517,10 @@ namespace Cocokoishi.VRCALoader
             EditorGUILayout.Space(4);
             if (GUILayout.Button("Controller Extract  ▾", GUILayout.Height(22)))
                 ControllerExtract.Open();
+#if VRC_SDK_VRCSDK3
+            if (GUILayout.Button("Download VRCA", GUILayout.Height(22)))
+                VRCADownloadWindow.Open();
+#endif
             EditorGUILayout.BeginHorizontal(EditorStyles.toolbar);
             EditorGUI.BeginChangeCheck();
             EditorGUILayout.LabelField("Slots", GUILayout.Width(32));
@@ -532,6 +536,50 @@ namespace Cocokoishi.VRCALoader
             if (GUILayout.Button("Tutorial", EditorStyles.toolbarButton, GUILayout.Width(56)))
                 TutorialWindow.Open();
             EditorGUILayout.EndHorizontal();
+        }
+
+        internal static void AddDownloadedToSlot(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) return;
+
+            var window = GetWindow<VRCALoader>("VRCALoader");
+            var slot = window._slots.FirstOrDefault(s => string.IsNullOrWhiteSpace(s.path));
+            if (slot == null)
+            {
+                slot = new BundleSlot();
+                window._slots.Add(slot);
+            }
+
+            slot.path = Path.GetFullPath(path);
+            window._slotCount = window._slots.Count;
+            window.SaveState();
+            window.Show();
+            window.Repaint();
+        }
+
+        internal static void RemoveDownloadedFromSlots(string path)
+        {
+            var fullPath = Path.GetFullPath(path);
+            foreach (var window in Resources.FindObjectsOfTypeAll<VRCALoader>())
+            {
+                var changed = false;
+                foreach (var slot in window._slots)
+                {
+                    if (string.IsNullOrWhiteSpace(slot.path)) continue;
+                    string slotPath;
+                    try { slotPath = Path.GetFullPath(slot.path); }
+                    catch { continue; }
+                    if (!string.Equals(slotPath, fullPath,
+                            StringComparison.OrdinalIgnoreCase)) continue;
+                    window.UnloadSlot(slot);
+                    slot.path = "";
+                    changed = true;
+                }
+
+                if (!changed) continue;
+                window.SaveState();
+                window.Repaint();
+            }
         }
 
         private void HandleDragDrop(Rect rect, BundleSlot slot)

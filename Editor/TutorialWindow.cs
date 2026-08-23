@@ -69,10 +69,12 @@ namespace Cocokoishi.VRCALoader
 
             EditorGUILayout.LabelField("3.2 Cloud Recovery", boldLabel);
             EditorGUILayout.LabelField(
-                "Use dVRC to re-download uploaded VRCA files via the VRChat License API, " +
-                "then load the downloaded file here for inspection.",
+                "Log in through the VRChat SDK Control Panel, then click Download VRCA at the bottom of the " +
+                "VRCALoader window. Select one of your uploaded avatars or worlds and its target platform, then " +
+                "click Download. Avatars are saved as .vrca and worlds as .vrcw. Downloaded files are listed in " +
+                "the same window and can be placed directly into an empty loader slot with Add to Slot; a new " +
+                "slot is created automatically when needed.",
                 richLabel);
-            DrawLink("dVRC on GitHub", "https://github.com/200Tigersbloxed/dVRC/");
             EditorGUILayout.Space(6);
 
             // ── 4. Controller Extraction ──
