@@ -42,6 +42,7 @@ namespace Cocokoishi.VRCALoader
             public string contentName;
             public string contentId;
             public string platform;
+            public string vrchatUserName;
             public long size;
             public DateTime modified;
         }
@@ -309,13 +310,18 @@ namespace Cocokoishi.VRCALoader
             _downloadedScroll = EditorGUILayout.BeginScrollView(_downloadedScroll);
             foreach (var file in _downloaded.ToArray())
             {
-                if (!MatchesSearch(file.contentName, file.fileName, file.contentId)) continue;
+                if (!MatchesSearch(file.contentName, file.fileName, file.contentId, file.vrchatUserName)) continue;
 
                 EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
                 EditorGUILayout.BeginVertical();
                 EditorGUILayout.LabelField(file.contentName, EditorStyles.boldLabel);
                 EditorGUILayout.LabelField(
                     $"{PlatformLabel(file.platform)}  ·  {FormatBytes(file.size)}  ·  {file.modified:yyyy-MM-dd HH:mm}",
+                    EditorStyles.miniLabel);
+                EditorGUILayout.LabelField(
+                    string.IsNullOrEmpty(file.vrchatUserName)
+                        ? "Unknown (legacy download)"
+                        : file.vrchatUserName,
                     EditorStyles.miniLabel);
                 EditorGUILayout.LabelField(file.fileName, EditorStyles.miniLabel);
                 EditorGUILayout.EndVertical();
@@ -537,8 +543,9 @@ namespace Cocokoishi.VRCALoader
                     if (!this) return;
                     _selectedPlatforms[contentId] = build.platform;
                     Directory.CreateDirectory(DownloadRoot);
+                    var vrchatUserName = SafeFilePart(CurrentVrchatUserName());
                     var outputPath = Path.Combine(DownloadRoot,
-                        $"{SafeFilePart(contentName)}_{contentId}_{SafeFilePart(build.platform)}{extension}");
+                        $"{SafeFilePart(contentName)}_{contentId}_{SafeFilePart(build.platform)}__{vrchatUserName}{extension}");
                     var job = CreateJob(contentId, build.platform, "Connecting...");
                     _status = $"Downloading {contentName} ({PlatformLabel(build.platform)}).";
                     DownloadAsset(build.assetUrl, outputPath, job);
@@ -689,6 +696,7 @@ namespace Cocokoishi.VRCALoader
 
             var contentId = "";
             var platform = "";
+            var vrchatUserName = "";
             var contentName = stem;
             if (marker >= 0)
             {
@@ -697,7 +705,17 @@ namespace Cocokoishi.VRCALoader
                 if (platformStart > idStart)
                 {
                     contentId = stem.Substring(idStart, platformStart - idStart);
-                    platform = stem.Substring(platformStart + 1);
+                    var platformAndUser = stem.Substring(platformStart + 1);
+                    var userMarker = platformAndUser.IndexOf("__", StringComparison.Ordinal);
+                    if (userMarker >= 0)
+                    {
+                        platform = platformAndUser.Substring(0, userMarker);
+                        vrchatUserName = platformAndUser.Substring(userMarker + 2);
+                    }
+                    else
+                    {
+                        platform = platformAndUser;
+                    }
                     contentName = marker == 0 ? contentId : stem.Substring(0, marker).TrimEnd('_');
                 }
             }
@@ -709,6 +727,7 @@ namespace Cocokoishi.VRCALoader
                 contentName = contentName,
                 contentId = contentId,
                 platform = platform,
+                vrchatUserName = vrchatUserName,
                 size = info.Length,
                 modified = info.LastWriteTime
             };
@@ -716,9 +735,20 @@ namespace Cocokoishi.VRCALoader
 
         private DownloadedFile FindDownloaded(string contentId, string platform)
         {
-            return _downloaded.FirstOrDefault(file =>
+            var matches = _downloaded.Where(file =>
                 string.Equals(file.contentId, contentId, StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(file.platform, platform, StringComparison.OrdinalIgnoreCase));
+                string.Equals(file.platform, platform, StringComparison.OrdinalIgnoreCase)).ToList();
+            var currentUserName = SafeFilePart(CurrentVrchatUserName());
+            return matches.FirstOrDefault(file =>
+                       string.Equals(file.vrchatUserName, currentUserName, StringComparison.OrdinalIgnoreCase))
+                   ?? matches.FirstOrDefault(file => string.IsNullOrEmpty(file.vrchatUserName));
+        }
+
+        private static string CurrentVrchatUserName()
+        {
+            return APIUser.CurrentUser == null || string.IsNullOrWhiteSpace(APIUser.CurrentUser.displayName)
+                ? "UnknownUser"
+                : APIUser.CurrentUser.displayName;
         }
 
         private string GetSelectedPlatform(string avatarId, string[] platforms)

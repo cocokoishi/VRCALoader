@@ -73,7 +73,8 @@ namespace Cocokoishi.VRCALoader
                 "Choose Cloud Avatars or Cloud Worlds, select a target platform, and click Download. A build " +
                 "picker opens with the newest build for that platform selected by default; select another build " +
                 "when needed. Avatars are saved as .vrca and worlds as .vrcw under Assets/VRCALoader/VRCA/. " +
-                "The Downloaded tab can reveal or delete local files and add one directly to a loader slot. " +
+                "The Downloaded tab shows the VRChat user stored in each new file name, can reveal or delete " +
+                "local files, and can add one directly to a loader slot. " +
                 "An empty slot is reused automatically, or a new slot is created when needed.",
                 richLabel);
             EditorGUILayout.Space(6);

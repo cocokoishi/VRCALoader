@@ -7,7 +7,7 @@ All notable changes to this package will be documented in this file.
 ### Added
 - **Cloud Avatar and World downloads.** The new Download VRCA window lists content owned by the account currently signed in through the VRChat SDK, including thumbnails, basic information, available platforms, and local download status.
 - **Build selection.** Downloading now opens a build picker containing every downloadable entry returned in `unityPackages`. The newest build for the selected platform is selected by default using `created_at`, with `assetVersion` and Unity version data used as fallbacks, while older builds and other variants remain selectable.
-- **Downloaded content manager.** Downloaded avatars and worlds are listed together with their file size and can be revealed, deleted, or added directly to a VRCALoader slot. An empty slot is reused automatically, or a new slot is created when needed.
+- **Downloaded content manager.** Downloaded avatars and worlds are listed together with their VRChat account name and file size, and can be revealed, deleted, or added directly to a VRCALoader slot. New file names include a Windows-safe form of the current VRChat display name. An empty slot is reused automatically, or a new slot is created when needed.
 
 ### Changed
 - Avatar bundles are saved with the `.vrca` extension and World bundles with `.vrcw` under `Assets/VRCALoader/VRCA/`.
