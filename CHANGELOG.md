@@ -2,12 +2,22 @@
 
 All notable changes to this package will be documented in this file.
 
+## [0.2.1] - 2026-08-24
+
+### Added
+- **VRChat account attribution for downloads.** New Avatar and World file names include a Windows-safe form of the current VRChat display name. The Downloaded tab displays and searches by that name while continuing to recognize older files as legacy downloads.
+- **Slot file-name display.** The main VRCALoader window now shows the selected file name directly after the Load button before loading and after the asset summary once loaded. Downloader-generated names are condensed to content name, Win/iOS/Android platform, and account name; long labels use Unity's normal clipping without expanding the window.
+
+### Changed
+- Cloud Avatar and World cover images now use a 4:3 layout.
+- README and Tutorial download instructions now match the built-in Cloud Avatar, Cloud World, build-selection, and downloaded-file workflow.
+
 ## [0.2.0] - 2026-08-23
 
 ### Added
 - **Cloud Avatar and World downloads.** The new Download VRCA window lists content owned by the account currently signed in through the VRChat SDK, including thumbnails, basic information, available platforms, and local download status.
 - **Build selection.** Downloading now opens a build picker containing every downloadable entry returned in `unityPackages`. The newest build for the selected platform is selected by default using `created_at`, with `assetVersion` and Unity version data used as fallbacks, while older builds and other variants remain selectable.
-- **Downloaded content manager.** Downloaded avatars and worlds are listed together with their VRChat account name and file size, and can be revealed, deleted, or added directly to a VRCALoader slot. New file names include a Windows-safe form of the current VRChat display name. An empty slot is reused automatically, or a new slot is created when needed.
+- **Downloaded content manager.** Downloaded avatars and worlds are listed together with their file size and can be revealed, deleted, or added directly to a VRCALoader slot. An empty slot is reused automatically, or a new slot is created when needed.
 
 ### Changed
 - Avatar bundles are saved with the `.vrca` extension and World bundles with `.vrcw` under `Assets/VRCALoader/VRCA/`.

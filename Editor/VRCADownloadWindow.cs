@@ -290,7 +290,7 @@ namespace Cocokoishi.VRCALoader
 
         private void DrawThumbnail(string contentId)
         {
-            var rect = GUILayoutUtility.GetRect(88, 88, GUILayout.Width(88), GUILayout.Height(88));
+            var rect = GUILayoutUtility.GetRect(112, 84, GUILayout.Width(112), GUILayout.Height(84));
             if (_thumbnails.TryGetValue(contentId, out var texture) && texture != null)
                 GUI.DrawTexture(rect, texture, ScaleMode.ScaleAndCrop);
             else

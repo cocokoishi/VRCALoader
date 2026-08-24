@@ -1,6 +1,6 @@
 {
   "name": "dev.cocokoishi.vrcaloader",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "displayName": "VRCALoader",
   "description": "Load VRCA/VRCW assetbundle files directly into the Unity Editor for avatar recovery and inspection.",
   "unity": "2022.3",

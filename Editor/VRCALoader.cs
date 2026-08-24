@@ -4,6 +4,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -40,6 +41,9 @@ namespace Cocokoishi.VRCALoader
         private static readonly Color BadgeBg = new Color(0.17f, 0.024f, 0.024f);
         private static readonly Color BadgeFg = new Color(1f, 0.604f, 0f);
         private static Texture2D _badgeTex;
+        private static readonly Regex DownloadedFileNamePattern = new Regex(
+            @"^(?<name>.+)_(?:avtr|wrld)_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}_(?<platform>standalonewindows|android|ios)__(?<user>.+)$",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
         private static readonly string VrchatAvatarsDir = Path.GetFullPath(Path.Combine(
             Path.Combine(Path.GetDirectoryName(
@@ -444,11 +448,13 @@ namespace Cocokoishi.VRCALoader
                 if (GUILayout.Button("Load", GUILayout.Width(56), GUILayout.Height(20))) StartLoad(slot);
                 GUI.enabled = true;
                 if (string.IsNullOrEmpty(slot.path)) EditorGUILayout.LabelField("Select a file...", EditorStyles.centeredGreyMiniLabel);
+                else DrawLoadedFileName(slot);
             }
             else
             {
                 if (GUILayout.Button("Unload", GUILayout.Width(56), GUILayout.Height(20))) { UnloadSlot(slot); Repaint(); }
-                EditorGUILayout.LabelField(DescribeSlot(slot), EditorStyles.miniBoldLabel);
+                GUILayout.Label(DescribeSlot(slot), EditorStyles.miniBoldLabel, GUILayout.ExpandWidth(false));
+                DrawLoadedFileName(slot);
             }
             EditorGUILayout.EndHorizontal();
 
@@ -469,6 +475,28 @@ namespace Cocokoishi.VRCALoader
             else if (slot.assets != null && slot.assets.Length > 0) parts.Add($"{slot.assets.Length} assets");
             if (slot.spawned.Count > 0) parts.Add($"{slot.spawned.Count} spawned");
             return parts.Count > 0 ? string.Join(", ", parts) : "Loaded";
+        }
+
+        private void DrawLoadedFileName(BundleSlot slot)
+        {
+            if (string.IsNullOrWhiteSpace(slot.path)) return;
+            string fileName;
+            try { fileName = Path.GetFileName(slot.path); }
+            catch { fileName = slot.path; }
+            if (string.IsNullOrEmpty(fileName)) return;
+
+            var stem = Path.GetFileNameWithoutExtension(fileName);
+            var match = DownloadedFileNamePattern.Match(stem);
+            if (match.Success)
+            {
+                var platform = match.Groups["platform"].Value;
+                if (platform.Equals("standalonewindows", StringComparison.OrdinalIgnoreCase)) platform = "Win";
+                else if (platform.Equals("ios", StringComparison.OrdinalIgnoreCase)) platform = "iOS";
+                else platform = "Android";
+                fileName = $"{match.Groups["name"].Value} · {platform} · {match.Groups["user"].Value}";
+            }
+
+            EditorGUILayout.LabelField(new GUIContent(fileName, slot.path), EditorStyles.label);
         }
 
         private static void DrawAssetRow(BundleSlot slot, UnityEngine.Object asset)
