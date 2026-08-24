@@ -579,6 +579,27 @@ namespace Cocokoishi.VRCALoader
             window.Repaint();
         }
 
+        internal static bool IsDownloadedInSlot(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path)) return false;
+            string fullPath;
+            try { fullPath = Path.GetFullPath(path); }
+            catch { return false; }
+
+            foreach (var window in Resources.FindObjectsOfTypeAll<VRCALoader>())
+            foreach (var slot in window._slots)
+            {
+                if (string.IsNullOrWhiteSpace(slot.path)) continue;
+                try
+                {
+                    if (string.Equals(Path.GetFullPath(slot.path), fullPath,
+                            StringComparison.OrdinalIgnoreCase)) return true;
+                }
+                catch { }
+            }
+            return false;
+        }
+
         internal static void RemoveDownloadedFromSlots(string path)
         {
             var fullPath = Path.GetFullPath(path);
