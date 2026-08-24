@@ -85,7 +85,6 @@ namespace Cocokoishi.VRCALoader
         private string _message = "";
         private MessageType _messageType = MessageType.Info;
 
-        [MenuItem("Tools/VRCALoader/Reference Remapper")]
         public static void Open()
         {
             var window = GetWindow<ReferenceRemapperWindow>("Reference Remapper");
