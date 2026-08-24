@@ -11,8 +11,12 @@ All notable changes to this package will be documented in this file.
 ### Changed
 - The two existing main-window actions now share the first row, with Reference Remapper on a dedicated second row.
 - Shader and Script mappings remain visible after their placeholder references have already been repaired, so repeated analysis accurately shows the known mappings while reporting zero remaining replacements.
+- Reference Remapper now provides separate **Apply Shaders** and **Apply Scripts** actions alongside **Apply All**, allowing either reference type to be written without modifying the other.
 - The backup-writing implementation remains available internally, but its UI option is hidden and disabled by default.
 - README and Tutorial documentation now cover Reference Remapper, its supported references, and its lawful-recovery limitation.
+
+### Fixed
+- Reference Remapper now uses short sibling temporary names when rewriting YAML, preventing Windows path-length failures for exports with long bundle, folder, or asset names.
 
 ### Notice
 - Reference Remapper was inspired by FACS Utilities and was implemented under clean-room principles without copying any source code from FACS Utilities.

@@ -100,8 +100,9 @@ namespace Cocokoishi.VRCALoader
             EditorGUILayout.LabelField(
                 "After extracting a bundle, click Reference Remapper on the second action row. Select the export and " +
                 "click Analyze References. Shader and MonoScript placeholders are matched to assets installed in the " +
-                "project, and unresolved entries can be assigned manually. Apply Remapping repairs matching Material, " +
-                "MonoBehaviour, AnimationClip, and supported .playable YAML references. Mappings remain visible when an " +
+                "project, and unresolved entries can be assigned manually. Apply Shaders repairs only Material Shader " +
+                "references, Apply Scripts repairs only MonoScript references, and Apply All performs both operations. " +
+                "MonoBehaviour, AnimationClip, and supported .playable YAML references are supported. Mappings remain visible when an " +
                 "already-repaired export is analyzed again.",
                 richLabel);
             EditorGUILayout.Space(4);

@@ -180,9 +180,24 @@ namespace Cocokoishi.VRCALoader
             // _keepBackups = EditorGUILayout.ToggleLeft("Keep .vrcaloader.bak files", _keepBackups, GUILayout.Width(184));
             GUILayout.FlexibleSpace();
 
-            var canApply = _analyzed && _mappings.Any(m => m.target != null) && _yamlFiles.Count > 0;
-            EditorGUI.BeginDisabledGroup(!canApply);
-            if (GUILayout.Button("Apply Remapping", GUILayout.Height(28), GUILayout.Width(128))) ApplyRemapping();
+            var canApplyShaders = _analyzed && _yamlFiles.Count > 0 &&
+                                  _mappings.Any(m => m.kind == ReferenceKind.Shader && m.target != null);
+            var canApplyScripts = _analyzed && _yamlFiles.Count > 0 &&
+                                  _mappings.Any(m => m.kind == ReferenceKind.Script && m.target != null);
+
+            EditorGUI.BeginDisabledGroup(!canApplyShaders);
+            if (GUILayout.Button("Apply Shaders", GUILayout.Height(28), GUILayout.Width(104)))
+                ApplyRemapping(true, false);
+            EditorGUI.EndDisabledGroup();
+
+            EditorGUI.BeginDisabledGroup(!canApplyScripts);
+            if (GUILayout.Button("Apply Scripts", GUILayout.Height(28), GUILayout.Width(100)))
+                ApplyRemapping(false, true);
+            EditorGUI.EndDisabledGroup();
+
+            EditorGUI.BeginDisabledGroup(!canApplyShaders && !canApplyScripts);
+            if (GUILayout.Button("Apply All", GUILayout.Height(28), GUILayout.Width(82)))
+                ApplyRemapping(true, true);
             EditorGUI.EndDisabledGroup();
             EditorGUILayout.EndHorizontal();
         }
@@ -493,7 +508,7 @@ namespace Cocokoishi.VRCALoader
 
         private void MappingChanged()
         {
-            _message = "Mapping updated. Apply Remapping will rescan the YAML files before writing.";
+            _message = "Mapping updated. The selected Apply action will rescan the YAML files before writing.";
             _messageType = MessageType.Info;
             Repaint();
         }
@@ -525,19 +540,23 @@ namespace Cocokoishi.VRCALoader
             }
         }
 
-        private void ApplyRemapping()
+        private void ApplyRemapping(bool applyShaders, bool applyScripts)
         {
             BuildLookups(out var shaders, out var scripts);
+            if (!applyShaders) shaders.Clear();
+            if (!applyScripts) scripts.Clear();
+
+            var scope = applyShaders && applyScripts ? "Shader and Script" : applyShaders ? "Shader" : "Script";
             var files = CollectYamlFiles(_selectedRoot);
             var preview = CountReferences(files, shaders, scripts);
             if (preview.Total == 0)
             {
-                _message = "No matching placeholder references remain in the selected export.";
+                _message = $"No matching {scope} placeholder references remain in the selected export.";
                 _messageType = MessageType.Info;
                 return;
             }
 
-            if (!EditorUtility.DisplayDialog("Apply Reference Remapping",
+            if (!EditorUtility.DisplayDialog($"Apply {scope} Remapping",
                     $"Rewrite {preview.Total} references across the selected AssetRipper export?\n\n" +
                     $"Shaders: {preview.shaderReferences}\nScripts: {preview.scriptReferences}",
                     "Apply", "Cancel")) return;
@@ -595,7 +614,7 @@ namespace Cocokoishi.VRCALoader
         {
             var encoding = DetectEncoding(path);
             var newline = DetectNewline(path, encoding);
-            var tempPath = Path.Combine(Path.GetDirectoryName(path) ?? "", "." + Path.GetFileName(path) + "." + Guid.NewGuid().ToString("N") + ".tmp");
+            var tempPath = CreateSiblingTempPath(path);
             var stats = new RewriteStats();
             changed = false;
             var unityClass = -1;
@@ -641,6 +660,18 @@ namespace Cocokoishi.VRCALoader
             {
                 if (File.Exists(tempPath)) File.Delete(tempPath);
             }
+        }
+
+        private static string CreateSiblingTempPath(string sourcePath)
+        {
+            var directory = Path.GetDirectoryName(sourcePath) ?? "";
+            for (var attempt = 0; attempt < 16; attempt++)
+            {
+                var candidate = Path.Combine(directory,
+                    "~rr" + Guid.NewGuid().ToString("N").Substring(0, 8) + ".tmp");
+                if (!File.Exists(candidate)) return candidate;
+            }
+            throw new IOException("Could not allocate a temporary file beside the YAML asset.");
         }
 
         private static RewriteStats CountReferences(IEnumerable<string> files,
