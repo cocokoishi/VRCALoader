@@ -453,7 +453,6 @@ namespace Cocokoishi.VRCALoader
             else
             {
                 if (GUILayout.Button("Unload", GUILayout.Width(56), GUILayout.Height(20))) { UnloadSlot(slot); Repaint(); }
-                GUILayout.Label(DescribeSlot(slot), EditorStyles.miniBoldLabel, GUILayout.ExpandWidth(false));
                 DrawLoadedFileName(slot);
             }
             EditorGUILayout.EndHorizontal();
@@ -466,15 +465,6 @@ namespace Cocokoishi.VRCALoader
                 for (int i = 0; i < slot.scenePaths.Length; i++) DrawSceneRow(slot, slot.scenePaths[i]);
 
             EditorGUILayout.EndVertical();
-        }
-
-        private static string DescribeSlot(BundleSlot slot)
-        {
-            var parts = new List<string>(3);
-            if (slot.isSceneBundle) parts.Add($"Scene bundle ({slot.scenePaths.Length} scene(s))");
-            else if (slot.assets != null && slot.assets.Length > 0) parts.Add($"{slot.assets.Length} assets");
-            if (slot.spawned.Count > 0) parts.Add($"{slot.spawned.Count} spawned");
-            return parts.Count > 0 ? string.Join(", ", parts) : "Loaded";
         }
 
         private void DrawLoadedFileName(BundleSlot slot)
@@ -496,7 +486,11 @@ namespace Cocokoishi.VRCALoader
                 fileName = $"{match.Groups["name"].Value} · {platform} · {match.Groups["user"].Value}";
             }
 
-            EditorGUILayout.LabelField(new GUIContent(fileName, slot.path), EditorStyles.label);
+            var fileNameStyle = new GUIStyle(EditorStyles.label)
+            {
+                alignment = TextAnchor.MiddleLeft
+            };
+            EditorGUILayout.LabelField(new GUIContent(fileName, slot.path), fileNameStyle, GUILayout.Height(20));
         }
 
         private static void DrawAssetRow(BundleSlot slot, UnityEngine.Object asset)

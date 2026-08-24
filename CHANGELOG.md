@@ -6,7 +6,7 @@ All notable changes to this package will be documented in this file.
 
 ### Added
 - **VRChat account attribution for downloads.** New Avatar and World file names include a Windows-safe form of the current VRChat display name. The Downloaded tab displays and searches by that name while continuing to recognize older files as legacy downloads.
-- **Slot file-name display.** The main VRCALoader window now shows the selected file name directly after the Load button before loading and after the asset summary once loaded. Downloader-generated names are condensed to content name, Win/iOS/Android platform, and account name; long labels use Unity's normal clipping without expanding the window.
+- **Slot file-name display.** The main VRCALoader window now shows the selected file name directly after the Load or Unload button. Downloader-generated names are condensed to content name, Win/iOS/Android platform, and account name; long labels use Unity's normal clipping without expanding the window.
 
 ### Changed
 - Cloud Avatar and World cover images now use a 4:3 layout.
