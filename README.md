@@ -11,10 +11,17 @@ The tool calls `AssetBundle.LoadFromFileAsync`, `LoadAllAssetsAsync`, and `Objec
 ### 3. Use Cases
 
 * **3.1 Recovering a local build** — If you lost your project files but still have the cached VRCA, find it under `C:\Users\<YourUsername>\AppData\LocalLow\VRChat\VRChat\Avatars` and load it with this tool. You can inspect blendshape values, shader parameters, and more. The loaded data lives in memory only and cannot be re-uploaded; use it as a reference to manually recreate your work. [unity-blendshape-to-json](https://github.com/cocokoishi/unity-blendshape-to-json) can help migrate blendshape data.
-* **3.2 Recovering from the cloud** — Log in through the VRChat SDK Control Panel, open VRCALoader, and click **Download VRCA**. Choose **Cloud Avatars** or **Cloud Worlds**, select a target platform, and click **Download**. A build picker opens with the newest build for that platform selected by default; select another build when needed. Avatars are saved as `.vrca` and worlds as `.vrcw` under `Assets/VRCALoader/VRCA/`. New file names include the current VRChat display name with Windows-incompatible characters replaced safely. The **Downloaded** tab shows that account name, can reveal or delete local files, and can add one directly to a loader slot. An empty slot is reused automatically, or a new slot is created when needed.
+* **3.2 Recovering from the cloud** — Log in through the VRChat SDK Control Panel, open VRCALoader, and click **Download VRCA&VRCW**. Choose **Cloud Avatars** or **Cloud Worlds**, select a target platform, and click **Download**. A build picker opens with the newest build for that platform selected by default; select another build when needed. Avatars are saved as `.vrca` and worlds as `.vrcw` under `Assets/VRCALoader/VRCA/`. New file names include the current VRChat display name with Windows-incompatible characters replaced safely. The **Downloaded** tab shows that account name, can reveal or delete local files, and can add one directly to a loader slot. An empty slot is reused automatically, or a new slot is created when needed.
 
 ### 4. Controller Extract
 AnimatorControllers inside a VRCA bundle are stripped of editor-layer data and state-graph layout information, so Unity's Animator window cannot open them. The **Controller Extract** window (opened from the VRCALoader footer) works around this by driving [AssetRipper](https://github.com/AssetRipper/AssetRipper) to unpack the bundle and produce readable `.controller` files. AssetRipper is auto-downloaded on first use.
+
+### 5. Reference Remapper
+After extracting a bundle, click **Reference Remapper** on the second action row. Select an export and run **Analyze References** to match AssetRipper Shader and MonoScript placeholder GUIDs with real assets installed in the current project. Unresolved entries can be assigned manually. **Apply Remapping** rewrites matching Shader references, MonoBehaviour `m_Script` references, AnimationClip script bindings, and supported `.playable` YAML while preserving the source files' encoding and line endings. Shader and Script mappings remain visible when an already-repaired export is analyzed again, while the replacement count reflects only references that still need repair.
+
+> **Reference Remapper warning:** Use this feature only to restore avatars, worlds, or related assets that you legally own or have explicit permission to recover. Do not use it for unauthorized extraction, copying, redistribution, or any illegal purpose.
+
+Reference Remapper was inspired by **FACS Utilities**. This implementation follows clean-room principles and contains no source code copied from FACS Utilities.
 
 ---
 

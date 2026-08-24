@@ -2,6 +2,22 @@
 
 All notable changes to this package will be documented in this file.
 
+## [0.3.0] - 2026-08-24
+
+### Added
+- **Reference Remapper.** AssetRipper exports can now be scanned for placeholder Shader and MonoScript references, reviewed in a dedicated GUI, manually overridden when necessary, and rewritten across supported Unity YAML files.
+- Shader references, MonoBehaviour `m_Script` references, AnimationClip script bindings, and `.playable` assets are supported. DLL-backed VRChat SDK scripts are resolved through their real MonoScript GUID and local file ID.
+
+### Changed
+- The two existing main-window actions now share the first row, with Reference Remapper on a dedicated second row.
+- Shader and Script mappings remain visible after their placeholder references have already been repaired, so repeated analysis accurately shows the known mappings while reporting zero remaining replacements.
+- The backup-writing implementation remains available internally, but its UI option is hidden and disabled by default.
+- README and Tutorial documentation now cover Reference Remapper, its supported references, and its lawful-recovery limitation.
+
+### Notice
+- Reference Remapper was inspired by FACS Utilities and was implemented under clean-room principles without copying any source code from FACS Utilities.
+- Reference Remapper is intended only for restoring avatars, worlds, and related assets that you legally own or are explicitly authorized to recover. It must not be used for unauthorized extraction, copying, redistribution, or any illegal purpose.
+
 ## [0.2.1] - 2026-08-24
 
 ### Added

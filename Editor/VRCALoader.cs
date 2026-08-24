@@ -537,12 +537,16 @@ namespace Cocokoishi.VRCALoader
         private void DrawFooter()
         {
             EditorGUILayout.Space(4);
+            EditorGUILayout.BeginHorizontal();
             if (GUILayout.Button("Extract All Assets&Controller", GUILayout.Height(22)))
                 ControllerExtract.Open();
 #if VRC_SDK_VRCSDK3
             if (GUILayout.Button("Download VRCA&VRCW", GUILayout.Height(22)))
                 VRCADownloadWindow.Open();
 #endif
+            EditorGUILayout.EndHorizontal();
+            if (GUILayout.Button("Reference Remapper", GUILayout.Height(22)))
+                ReferenceRemapperWindow.Open();
             EditorGUILayout.BeginHorizontal(EditorStyles.toolbar);
             EditorGUI.BeginChangeCheck();
             EditorGUILayout.LabelField("Slots", GUILayout.Width(32));

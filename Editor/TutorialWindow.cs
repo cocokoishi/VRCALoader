@@ -69,7 +69,7 @@ namespace Cocokoishi.VRCALoader
 
             EditorGUILayout.LabelField("3.2 Cloud Recovery", boldLabel);
             EditorGUILayout.LabelField(
-                "Log in through the VRChat SDK Control Panel, open VRCALoader, and click Download VRCA. " +
+                "Log in through the VRChat SDK Control Panel, open VRCALoader, and click Download VRCA&VRCW. " +
                 "Choose Cloud Avatars or Cloud Worlds, select a target platform, and click Download. A build " +
                 "picker opens with the newest build for that platform selected by default; select another build " +
                 "when needed. Avatars are saved as .vrca and worlds as .vrcw under Assets/VRCALoader/VRCA/. " +
@@ -94,6 +94,27 @@ namespace Cocokoishi.VRCALoader
                 "Note: AssetRipper must be running before extraction. " +
                 "Use the \"Reveal start_assetripper.bat\" button in the Controller Extract window to locate and run it.",
                 new GUIStyle(richLabel) { normal = { textColor = Color.grey } });
+            EditorGUILayout.Space(6);
+
+            EditorGUILayout.LabelField("5. Reference Remapper", sectionLabel);
+            EditorGUILayout.LabelField(
+                "After extracting a bundle, click Reference Remapper on the second action row. Select the export and " +
+                "click Analyze References. Shader and MonoScript placeholders are matched to assets installed in the " +
+                "project, and unresolved entries can be assigned manually. Apply Remapping repairs matching Material, " +
+                "MonoBehaviour, AnimationClip, and supported .playable YAML references. Mappings remain visible when an " +
+                "already-repaired export is analyzed again.",
+                richLabel);
+            EditorGUILayout.Space(4);
+            EditorGUILayout.LabelField(
+                "WARNING: Reference Remapper is only for restoring avatars, worlds, and related assets that you legally " +
+                "own or are explicitly authorized to recover. Do not use it for unauthorized extraction, copying, " +
+                "redistribution, or any illegal purpose.",
+                warningLabel);
+            EditorGUILayout.Space(4);
+            EditorGUILayout.LabelField(
+                "Reference Remapper was inspired by FACS Utilities. It was implemented under clean-room principles, " +
+                "and no source code from FACS Utilities was copied.",
+                richLabel);
 
             EditorGUILayout.EndScrollView();
             EditorGUILayout.Space(8);
