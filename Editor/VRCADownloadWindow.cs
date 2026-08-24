@@ -280,9 +280,9 @@ namespace Cocokoishi.VRCALoader
             EditorGUI.EndDisabledGroup();
             EditorGUI.BeginDisabledGroup(local == null);
             var addLabel = local != null && VRCALoader.IsDownloadedInSlot(local.path)
-                ? "Add Again"
+                ? "Add Another Slot"
                 : "Add to Slot";
-            if (GUILayout.Button(addLabel, GUILayout.Width(82)))
+            if (GUILayout.Button(addLabel, GUILayout.Width(112)))
             {
                 VRCALoader.AddDownloadedToSlot(local.path);
                 _status = $"Added {local.fileName} to a main-window slot.";
@@ -328,8 +328,8 @@ namespace Cocokoishi.VRCALoader
                     EditorStyles.miniLabel);
                 EditorGUILayout.LabelField(file.fileName, EditorStyles.miniLabel);
                 EditorGUILayout.EndVertical();
-                var addLabel = VRCALoader.IsDownloadedInSlot(file.path) ? "Add Again" : "Add to Slot";
-                if (GUILayout.Button(addLabel, GUILayout.Width(82), GUILayout.Height(36)))
+                var addLabel = VRCALoader.IsDownloadedInSlot(file.path) ? "Add Another Slot" : "Add to Slot";
+                if (GUILayout.Button(addLabel, GUILayout.Width(112), GUILayout.Height(36)))
                 {
                     VRCALoader.AddDownloadedToSlot(file.path);
                     _status = $"Added {file.fileName} to a main-window slot.";
