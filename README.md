@@ -56,3 +56,13 @@ Direct AssetBundle loading is intended for inspection. For project recovery, use
 Copyright (c) 2026 cocokoishi.
 
 VRCALoader is licensed under the **GNU Affero General Public License v3.0 only (AGPL-3.0-only)**. See [LICENSE](LICENSE) for the complete license text.
+
+---
+
+### Legal Notice
+
+VRChat restricts reverse engineering, but its Terms also explicitly state that users retain copyright and other proprietary rights in the content they upload.
+
+VRCALoader takes the position that downloading and recovering your own copyrighted content from your own account is a legitimate exercise of those rights. This does not extend to content you do not own or have permission to recover.
+
+Do not use VRCALoader to recover or redistribute other users' content.
