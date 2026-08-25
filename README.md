@@ -4,8 +4,6 @@ VRCALoader can download **VRCA/VRCW builds from your own VRChat account** and lo
 
 With **Asset Extraction & Controllers** and **Reference Remapper**, it can also extract the bundle and repair missing controller, shader and script references, making recovery of your own uploaded avatars/worlds close to a one-click workflow. Some manual cleanup may still be required before upload.
 
-> **Tip:** Most recovered avatars need their **Gesture Layer removed** before they can be uploaded normally.
-
 > **Warning:** This tool is intended for recovering your own avatars and worlds only. Do not use it on content you do not own or have explicit permission to access.
 
 ## Usage
