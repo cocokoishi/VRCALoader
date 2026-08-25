@@ -198,9 +198,8 @@ namespace Cocokoishi.VRCALoader
                     EditorGUILayout.BeginHorizontal();
                     ex.expanded = EditorGUILayout.Foldout(ex.expanded, ex.folderName, true, EditorStyles.foldoutHeader);
                     GUILayout.FlexibleSpace();
-                    EditorGUILayout.LabelField($"{ex.controllers.Count} controller(s)", EditorStyles.miniLabel);
                     if (GUILayout.Button("Reveal", EditorStyles.miniButton, GUILayout.Width(56)))
-                        EditorUtility.RevealInFinder(ex.fullPath);
+                        RevealInProject(ex.fullPath);
                     if (GUILayout.Button("Delete", EditorStyles.miniButton, GUILayout.Width(56)))
                     {
                         if (EditorUtility.DisplayDialog("Delete Extraction",
@@ -226,11 +225,11 @@ namespace Cocokoishi.VRCALoader
                                     try { AssetDatabase.ImportAsset(relPath, ImportAssetOptions.ForceUpdate); } catch { }
                                     var asset = AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(relPath);
                                     if (asset != null) AssetDatabase.OpenAsset(asset);
-                                    else EditorUtility.RevealInFinder(c.filePath);
+                                    else RevealInProject(c.filePath);
                                 };
                             }
                             if (GUILayout.Button("Reveal", EditorStyles.miniButton, GUILayout.Width(56)))
-                                EditorUtility.RevealInFinder(c.filePath);
+                                RevealInProject(c.filePath);
                             EditorGUILayout.EndHorizontal();
                         }
                     }
@@ -251,7 +250,7 @@ namespace Cocokoishi.VRCALoader
             GUILayout.FlexibleSpace();
             EditorGUILayout.BeginHorizontal(EditorStyles.toolbar);
             if (GUILayout.Button("Open Exports Folder", EditorStyles.toolbarButton))
-                EditorUtility.RevealInFinder(ExportsRoot);
+                RevealInProject(ExportsRoot);
             if (GUILayout.Button("Clear All Exports", EditorStyles.toolbarButton)) ClearExports();
             GUILayout.FlexibleSpace();
             EditorGUILayout.EndHorizontal();
@@ -550,6 +549,37 @@ namespace Cocokoishi.VRCALoader
         }
 
         // ── Helpers ────────────────────────────────────────
+
+        private void RevealInProject(string fullPath)
+        {
+            if (string.IsNullOrEmpty(fullPath) || (!File.Exists(fullPath) && !Directory.Exists(fullPath)))
+            {
+                _status = "The selected export asset no longer exists.";
+                return;
+            }
+
+            var assetsPath = Path.GetFullPath(Application.dataPath)
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            var targetPath = Path.GetFullPath(fullPath);
+            if (!targetPath.StartsWith(assetsPath + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+            {
+                _status = "The selected item is outside this Unity project's Assets folder.";
+                return;
+            }
+
+            var assetPath = "Assets" + targetPath.Substring(assetsPath.Length).Replace('\\', '/');
+            AssetDatabase.ImportAsset(assetPath, ImportAssetOptions.ForceUpdate);
+            var asset = AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(assetPath);
+            if (asset == null)
+            {
+                _status = "Unity could not locate the selected item in the Project window.";
+                return;
+            }
+
+            EditorUtility.FocusProjectWindow();
+            Selection.activeObject = asset;
+            EditorGUIUtility.PingObject(asset);
+        }
 
         private void CheckServerAlive()
         {

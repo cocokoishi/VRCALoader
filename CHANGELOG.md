@@ -12,6 +12,7 @@ All notable changes to this package will be documented in this file.
 - The two existing main-window actions now share the first row, with Reference Remapper on a dedicated second row.
 - Shader and Script mappings remain visible after their placeholder references have already been repaired, so repeated analysis accurately shows the known mappings while reporting zero remaining replacements.
 - Reference Remapper now provides separate **Apply Shaders** and **Apply Scripts** actions alongside **Apply All**, allowing either reference type to be written without modifying the other.
+- Controller Extract no longer displays per-extraction controller counts. Its Reveal actions and Open Exports Folder now locate assets inside Unity's Project window instead of opening the system file manager.
 - The backup-writing implementation remains available internally, but its UI option is hidden and disabled by default.
 - README and Tutorial documentation now cover Reference Remapper, its supported references, and its lawful-recovery limitation.
 
