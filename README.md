@@ -1,12 +1,10 @@
 ## What Can It Do?
 
-VRCALoader can download **VRCA/VRCW builds from your own VRChat account** and load them directly into Unity through `AssetBundle` memory loading for lossless inspection.
+VRCALoader can download **VRCA/VRCW builds from your own VRChat account** and load them directly into Unity through `AssetBundle` memory loading, letting you inspect the contents preserved in the uploaded bundle without first reconstructing them into project files.
 
-With **Asset Extraction & Controllers** and **Reference Remapper**, it can also extract the bundle and repair missing controller, shader and script references, making recovery of your own uploaded avatars/worlds close to a one-click workflow.
+With **Asset Extraction & Controllers** and **Reference Remapper**, it can also extract the bundle and repair missing controller, shader and script references, making recovery of your own uploaded avatars/worlds close to a one-click workflow. Some manual cleanup may still be required before upload.
 
 > **Tip:** Most recovered avatars need their **Gesture Layer removed** before they can be uploaded normally.
-
-Load VRCA/VRCW AssetBundle files directly into the Unity Editor for avatar inspection and recovery.
 
 > **Warning:** This tool is intended for recovering your own avatars and worlds only. Do not use it on content you do not own or have explicit permission to access.
 
@@ -20,7 +18,7 @@ The tool calls `AssetBundle.LoadFromFileAsync`, `LoadAllAssetsAsync`, and `Objec
 
 ### 3. Use Cases
 
-* **3.1 Recovering a local build** — If you lost your project files but still have the cached VRCA, find it under `C:\Users\<YourUsername>\AppData\LocalLow\VRChat\VRChat\Avatars` and load it with this tool. You can inspect blendshape values, shader parameters, and more. The loaded data lives in memory only and cannot be re-uploaded; use it as a reference to manually recreate your work. [unity-blendshape-to-json](https://github.com/cocokoishi/unity-blendshape-to-json) can help migrate blendshape data.
+* **3.1 Recovering a local build** — If you lost your project files but still have the cached VRCA, find it under `C:\Users\<YourUsername>\AppData\LocalLow\VRChat\VRChat\Avatars` and load it with this tool. You can inspect blendshape values, shader parameters, and more. Objects loaded directly from the AssetBundle are for inspection and cannot themselves be re-uploaded as a reconstructed Unity project; for project recovery, use **Asset Extraction & Controllers** together with **Reference Remapper**. [unity-blendshape-to-json](https://github.com/cocokoishi/unity-blendshape-to-json) can help migrate blendshape data.
 * **3.2 Recovering from the cloud** — Log in through the VRChat SDK Control Panel, open VRCALoader, and click **Download VRCA&VRCW**. Choose **Cloud Avatars** or **Cloud Worlds**, select a target platform, and click **Download**. A build picker opens with the newest build for that platform selected by default; select another build when needed. Avatars are saved as `.vrca` and worlds as `.vrcw` under `Assets/VRCALoader/VRCA/`. New file names include the current VRChat display name with Windows-incompatible characters replaced safely. The **Downloaded** tab shows that account name, can reveal or delete local files, and can add one directly to a loader slot. An empty slot is reused automatically, or a new slot is created when needed.
 
 ### 4. Asset Extraction & Controllers
@@ -45,9 +43,9 @@ The core concept of loading VRCA bundles directly into the Unity Editor was insp
 
 During development I discovered **[FACS Utilities](https://github.com/FACS01-01/FACS_Utilities)**, a more comprehensive toolset that handles many VRChat SDK edge cases. Its `LoadBundle` implementation informed the controller-patching logic that keeps the avatar descriptor from crashing on bundle-loaded avatars.
 
-This project is designed to help recover as much of your original avatar logic as possible when the Unity project files are lost but the locally-built VRCA cache still exists.
+This project is designed to help recover as much of your original avatar logic as possible when the Unity project files are lost but the locally-built VRCA cache or an uploaded build from your account still exists.
 
-**This tool is not intended to turn incomplete AssetRipper output into a finished avatar.** It displays the loaded AssetBundle as a visual reference so you can manually recreate your work using your own legitimate assets. Do not attempt to upload the loaded bundle content.
+Direct AssetBundle loading is intended for inspection. For project recovery, use **Asset Extraction & Controllers** together with **Reference Remapper**; the result may still require normal Unity-side cleanup before it is ready to upload.
 
 ---
 
