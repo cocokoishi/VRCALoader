@@ -56,8 +56,10 @@ VRCALoader is licensed under the **GNU Affero General Public License v3.0 only (
 
 ### Legal Notice
 
-VRChat restricts reverse engineering, but its Terms also explicitly state that users retain copyright and other proprietary rights in the content they upload.
+VRChat's Terms restrict reverse engineering of the VRChat Platform and SDK, while also stating that users retain copyright and other proprietary rights in the content they upload.
 
-VRCALoader takes the position that downloading and recovering your own copyrighted content from your own account is a legitimate exercise of those rights. This does not extend to content you do not own or have permission to recover.
+VRCALoader only accesses builds from your own account. Its recovery process operates on the locally obtained, Unity-generated AssetBundle rather than the VRChat Platform or SDK; no VRChat SDK code is decompiled or reconstructed, and missing SDK references are only re-linked to a legitimately installed SDK.
 
-Do not use VRCALoader to recover or redistribute other users' content.
+On this basis, VRCALoader considers recovery of content from your own account that you own or are authorized to restore to be compliant with the VRChat Terms. This does not apply to content belonging to other users.
+
+Do not use VRCALoader to recover, copy, or redistribute content that is not yours.
