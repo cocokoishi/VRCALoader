@@ -8,7 +8,13 @@ With **Asset Extraction & Controllers** and **Reference Remapper**, it can also 
 
 ## Usage
 
-Install the latest unitypackage and open **Tools > VRCALoader**. When logged into the VRChat SDK, VRCALoader can also download VRCA/VRCW builds from your own account.
+Install the latest unitypackage and open **Tools > VRCALoader**.
+
+### Download VRCA / VRCW
+
+When logged into the official VRChat SDK, VRCALoader uses the SDK's existing authenticated API methods to list and download VRCA/VRCW builds belonging to the current account. VRChat's [Creator Guidelines](https://hello.vrchat.com/creator-guidelines) permit applications to interact with its API when following their rules.
+
+VRCALoader only lists and downloads builds from **your own account**.
 
 ### Direct AssetBundle Loading
 
