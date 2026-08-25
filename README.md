@@ -30,6 +30,8 @@ Unlike direct loading, this workflow produces recoverable project files that can
 
 The required shaders, scripts, SDKs, and packages must already exist in the Unity project. **Poiyomi shaders must be mapped manually.**
 
+All of the downloaded content and extracted assets are under Assets/VRCALoader.
+
 > **Tip:** Most recovered avatars need their **Gesture Layer removed** before they can be uploaded normally.
 
 ---
