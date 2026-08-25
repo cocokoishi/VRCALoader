@@ -14,7 +14,7 @@ Install the latest unitypackage and open **Tools > VRCALoader**.
 
 When logged into the official VRChat SDK, VRCALoader uses the SDK's existing authenticated API methods to list and download VRCA/VRCW builds belonging to the current account. VRChat's [Creator Guidelines](https://hello.vrchat.com/creator-guidelines) permit applications to interact with its API when following their rules.
 
-VRCALoader only lists and downloads builds from **your own account**. In fact, it has no permission to download VRCA/VRCW builds belonging to other users, including builds associated with public avatars or worlds.
+VRCALoader only lists and downloads builds from **your own account**. In fact, you do not have permission to download any other users' or public VRCA files.
 
 ### Direct AssetBundle Loading
 
