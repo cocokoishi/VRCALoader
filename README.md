@@ -1,3 +1,11 @@
+## What Can It Do?
+
+VRCALoader can download **VRCA/VRCW builds from your own VRChat account** and load them directly into Unity through `AssetBundle` memory loading for lossless inspection.
+
+With **Asset Extraction & Controllers** and **Reference Remapper**, it can also extract the bundle and repair missing controller, shader and script references, making recovery of your own uploaded avatars/worlds close to a one-click workflow.
+
+> **Tip:** Most recovered avatars need their **Gesture Layer removed** before they can be uploaded normally.
+
 Load VRCA/VRCW AssetBundle files directly into the Unity Editor for avatar inspection and recovery.
 
 > **Warning:** This tool is intended for recovering your own avatars and worlds only. Do not use it on content you do not own or have explicit permission to access.
