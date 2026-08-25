@@ -40,3 +40,11 @@ During development I discovered **[FACS Utilities](https://github.com/FACS01-01/
 This project is designed to help recover as much of your original avatar logic as possible when the Unity project files are lost but the locally-built VRCA cache still exists.
 
 **This tool is not intended to turn incomplete AssetRipper output into a finished avatar.** It displays the loaded AssetBundle as a visual reference so you can manually recreate your work using your own legitimate assets. Do not attempt to upload the loaded bundle content.
+
+---
+
+### License
+
+Copyright (c) 2026 cocokoishi.
+
+VRCALoader is licensed under the **GNU Affero General Public License v3.0 only (AGPL-3.0-only)**. See [LICENSE](LICENSE) for the complete license text.
