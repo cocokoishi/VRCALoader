@@ -155,7 +155,7 @@ namespace Cocokoishi.VRCALoader
                 var oldBg = GUI.backgroundColor;
                 GUI.backgroundColor = new Color(0f, 0.48f, 1f);
                 GUI.enabled = !_busy;
-                if (GUILayout.Button("Start AssetRipper", GUILayout.Height(28)))
+                if (GUILayout.Button("Start AssetRipper:55510", GUILayout.Height(28)))
                     StartAssetRipper();
                 GUI.backgroundColor = oldBg;
             }
@@ -451,7 +451,7 @@ namespace Cocokoishi.VRCALoader
                 req.uploadHandler = new UploadHandlerRaw(Encoding.UTF8.GetBytes(body));
                 req.downloadHandler = new DownloadHandlerBuffer();
                 req.SetRequestHeader("Content-Type", "application/x-www-form-urlencoded");
-                req.timeout = 60;
+                req.timeout = 514;
                 var op = req.SendWebRequest();
                 while (!op.isDone) yield return null;
                 if (req.result != UnityWebRequest.Result.Success)
@@ -477,7 +477,7 @@ namespace Cocokoishi.VRCALoader
                 req.uploadHandler = new UploadHandlerRaw(Encoding.UTF8.GetBytes(body));
                 req.downloadHandler = new DownloadHandlerBuffer();
                 req.SetRequestHeader("Content-Type", "application/x-www-form-urlencoded");
-                req.timeout = 600;
+                req.timeout = 996;
                 var op = req.SendWebRequest();
                 while (!op.isDone) yield return null;
                 if (req.result != UnityWebRequest.Result.Success)
