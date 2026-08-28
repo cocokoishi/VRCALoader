@@ -6,6 +6,7 @@ All notable changes to this package will be documented in this file.
 
 ### Added
 - Controller Extract now asks users to confirm that they have legitimate access rights before unpacking an AssetBundle selected from outside `Assets/VRCALoader/VRCA/` or the current user's `AppData/LocalLow/VRChat/VRChat/Avatars/` folder. Users can continue or cancel the extraction.
+- Shader mappings in Reference Remapper can now be expanded to show the materials using each placeholder Shader. The material list supports name and path search, per-material Ignore controls for bulk operations, and an individual Apply action.
 
 ### Changed
 - Removed the persistent lawful-use warning box from the Reference Remapper window.

@@ -63,6 +63,16 @@ namespace Cocokoishi.VRCALoader
             public MonoScript script;
             public UnityEngine.Object resource;
             public SerializedReference target;
+            public readonly List<MaterialUsage> materialUsages = new List<MaterialUsage>();
+            public bool materialUsagesFoldout;
+        }
+
+        private sealed class MaterialUsage
+        {
+            public string path;
+            public string label;
+            public bool ignored;
+            public bool applied;
         }
 
         private struct RewriteStats
@@ -83,6 +93,7 @@ namespace Cocokoishi.VRCALoader
         private bool _shaderFoldout = true;
         private bool _scriptFoldout = true;
         private bool _postProcessResourcesFoldout = true;
+        private string _materialSearch = "";
         private bool _keepBackups = false;
         private bool _analyzed;
         private int _plannedReferences;
@@ -221,6 +232,17 @@ namespace Cocokoishi.VRCALoader
                 $"{groupLabel} ({resolved} resolved, {rows.Count - resolved} unresolved)", true);
             if (!foldout) return;
 
+            if (kind == ReferenceKind.Shader)
+            {
+                DrawMaterialSearch();
+                foreach (var row in rows)
+                {
+                    if (!ShaderRowMatchesMaterialSearch(row)) continue;
+                    DrawShaderMappingRow(row);
+                }
+                return;
+            }
+
             foreach (var row in rows)
             {
                 EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
@@ -233,12 +255,7 @@ namespace Cocokoishi.VRCALoader
                 EditorGUILayout.LabelField(new GUIContent(row.label, row.sourcePath), GUILayout.Width(labelWidth));
 
                 EditorGUI.BeginChangeCheck();
-                if (kind == ReferenceKind.Shader)
-                {
-                    var picked = (Shader)EditorGUILayout.ObjectField(row.shader, typeof(Shader), false);
-                    if (EditorGUI.EndChangeCheck()) SetShaderTarget(row, picked);
-                }
-                else if (kind == ReferenceKind.Script)
+                if (kind == ReferenceKind.Script)
                 {
                     var picked = (MonoScript)EditorGUILayout.ObjectField(row.script, typeof(MonoScript), false);
                     if (EditorGUI.EndChangeCheck()) SetScriptTarget(row, picked);
@@ -250,6 +267,106 @@ namespace Cocokoishi.VRCALoader
                 }
                 EditorGUILayout.EndHorizontal();
             }
+        }
+
+        private void DrawMaterialSearch()
+        {
+            EditorGUILayout.BeginHorizontal(EditorStyles.toolbar);
+            EditorGUILayout.LabelField("Material Search", GUILayout.Width(96));
+            _materialSearch = EditorGUILayout.TextField(_materialSearch,
+                GUI.skin.FindStyle("ToolbarSearchTextField") ?? EditorStyles.textField);
+            if (!string.IsNullOrEmpty(_materialSearch) && GUILayout.Button("Clear", EditorStyles.toolbarButton,
+                    GUILayout.Width(46)))
+            {
+                _materialSearch = "";
+                GUI.FocusControl(null);
+            }
+            EditorGUILayout.EndHorizontal();
+        }
+
+        private bool ShaderRowMatchesMaterialSearch(MappingRow row)
+        {
+            if (string.IsNullOrWhiteSpace(_materialSearch)) return true;
+            var search = _materialSearch.Trim();
+            return row.materialUsages.Any(usage => !usage.applied &&
+                (usage.label.IndexOf(search, StringComparison.OrdinalIgnoreCase) >= 0 ||
+                 usage.path.IndexOf(search, StringComparison.OrdinalIgnoreCase) >= 0));
+        }
+
+        private void DrawShaderMappingRow(MappingRow row)
+        {
+            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+            EditorGUILayout.BeginHorizontal();
+
+            var oldColor = GUI.contentColor;
+            GUI.contentColor = row.target == null ? new Color(1f, 0.68f, 0.18f) : new Color(0.35f, 0.9f, 0.45f);
+            GUILayout.Label(row.target == null ? "●" : "✓", GUILayout.Width(18));
+            GUI.contentColor = oldColor;
+
+            var visibleUsages = GetVisibleMaterialUsages(row);
+            var pendingCount = row.materialUsages.Count(usage => !usage.applied);
+            var ignoredCount = row.materialUsages.Count(usage => usage.ignored && !usage.applied);
+            var usageSummary = ignoredCount > 0
+                ? $"{pendingCount} materials, {ignoredCount} ignored"
+                : $"{pendingCount} materials";
+            var forceExpanded = !string.IsNullOrWhiteSpace(_materialSearch);
+            row.materialUsagesFoldout = EditorGUILayout.Foldout(
+                row.materialUsagesFoldout || forceExpanded,
+                row.label, true);
+            EditorGUILayout.LabelField(usageSummary, EditorStyles.miniLabel, GUILayout.Width(145));
+
+            EditorGUI.BeginChangeCheck();
+            var picked = (Shader)EditorGUILayout.ObjectField(row.shader, typeof(Shader), false);
+            if (EditorGUI.EndChangeCheck()) SetShaderTarget(row, picked);
+            EditorGUILayout.EndHorizontal();
+
+            if (row.materialUsagesFoldout || forceExpanded)
+            {
+                if (visibleUsages.Count == 0)
+                {
+                    EditorGUILayout.LabelField(
+                        string.IsNullOrWhiteSpace(_materialSearch)
+                            ? "No pending material references use this placeholder Shader."
+                            : "No materials match the current search.",
+                        EditorStyles.centeredGreyMiniLabel);
+                }
+                else
+                {
+                    foreach (var usage in visibleUsages) DrawMaterialUsageRow(row, usage);
+                }
+            }
+            EditorGUILayout.EndVertical();
+        }
+
+        private List<MaterialUsage> GetVisibleMaterialUsages(MappingRow row)
+        {
+            var usages = row.materialUsages.Where(usage => !usage.applied);
+            if (!string.IsNullOrWhiteSpace(_materialSearch))
+            {
+                var search = _materialSearch.Trim();
+                usages = usages.Where(usage =>
+                    usage.label.IndexOf(search, StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    usage.path.IndexOf(search, StringComparison.OrdinalIgnoreCase) >= 0);
+            }
+            return usages.OrderBy(usage => usage.label, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(usage => usage.path, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        private void DrawMaterialUsageRow(MappingRow shaderRow, MaterialUsage usage)
+        {
+            EditorGUILayout.BeginHorizontal();
+            GUILayout.Space(28);
+            EditorGUILayout.LabelField(new GUIContent(usage.label, usage.path));
+
+            EditorGUI.BeginChangeCheck();
+            usage.ignored = GUILayout.Toggle(usage.ignored, "Ignore", "Button", GUILayout.Width(64));
+            if (EditorGUI.EndChangeCheck()) MaterialIgnoreChanged();
+
+            EditorGUI.BeginDisabledGroup(usage.ignored || shaderRow.target == null || !File.Exists(usage.path));
+            if (GUILayout.Button("Apply", GUILayout.Width(58))) ApplyShaderToMaterial(shaderRow, usage);
+            EditorGUI.EndDisabledGroup();
+            EditorGUILayout.EndHorizontal();
         }
 
         private void AnalyzeSelectedExport()
@@ -274,6 +391,7 @@ namespace Cocokoishi.VRCALoader
 
                 EditorUtility.DisplayProgressBar("Reference Remapper", "Resolving Shader placeholders...", 0.48f);
                 ScanShaderPlaceholders();
+                ScanShaderMaterialUsages();
 
                 EditorUtility.DisplayProgressBar("Reference Remapper", "Resolving Script placeholders...", 0.68f);
                 ScanScriptPlaceholders(scriptMetaPaths, typeIndex, scriptIndex);
@@ -356,6 +474,40 @@ namespace Cocokoishi.VRCALoader
                     SetScriptTarget(row, monoScript, false);
                 }
                 _mappings.Add(row);
+            }
+        }
+
+        private void ScanShaderMaterialUsages()
+        {
+            var shaderRows = _mappings
+                .Where(row => row.kind == ReferenceKind.Shader)
+                .ToDictionary(row => row.placeholderGuid, row => row, StringComparer.OrdinalIgnoreCase);
+            if (shaderRows.Count == 0) return;
+
+            foreach (var materialPath in _yamlFiles.Where(path =>
+                         path.EndsWith(".mat", StringComparison.OrdinalIgnoreCase)))
+            {
+                try
+                {
+                    foreach (var line in File.ReadLines(materialPath))
+                    {
+                        var trimmed = line.TrimStart(' ', '\t');
+                        if (!trimmed.StartsWith("m_Shader: {", StringComparison.Ordinal) ||
+                            !TryExtractGuid(trimmed, out var shaderGuid) ||
+                            !shaderRows.TryGetValue(shaderGuid, out var shaderRow)) continue;
+
+                        shaderRow.materialUsages.Add(new MaterialUsage
+                        {
+                            path = materialPath,
+                            label = Path.GetFileNameWithoutExtension(materialPath)
+                        });
+                        break;
+                    }
+                }
+                catch (Exception e)
+                {
+                    Debug.LogWarning($"[ReferenceRemapper] Could not inspect material {materialPath}: {e.Message}");
+                }
             }
         }
 
@@ -629,6 +781,92 @@ namespace Cocokoishi.VRCALoader
             Repaint();
         }
 
+        private void MaterialIgnoreChanged()
+        {
+            _message = "Material Ignore settings updated. Ignored materials will be skipped by Apply Shaders and Apply All.";
+            _messageType = MessageType.Info;
+            Repaint();
+        }
+
+        private HashSet<string> GetIgnoredShaderMaterialPaths()
+        {
+            return new HashSet<string>(_mappings
+                .Where(row => row.kind == ReferenceKind.Shader)
+                .SelectMany(row => row.materialUsages)
+                .Where(usage => usage.ignored && !usage.applied)
+                .Select(usage => usage.path), StringComparer.OrdinalIgnoreCase);
+        }
+
+        private void ApplyShaderToMaterial(MappingRow shaderRow, MaterialUsage usage)
+        {
+            if (shaderRow == null || shaderRow.target == null || usage == null || usage.ignored ||
+                !File.Exists(usage.path)) return;
+
+            var shaders = new Dictionary<string, SerializedReference>(StringComparer.OrdinalIgnoreCase)
+            {
+                [shaderRow.placeholderGuid] = shaderRow.target
+            };
+            var scripts = new Dictionary<string, SerializedReference>(StringComparer.OrdinalIgnoreCase);
+            var postProcessResources = new Dictionary<string, SerializedReference>(StringComparer.OrdinalIgnoreCase);
+
+            try
+            {
+                var stats = RewriteYamlFile(usage.path, shaders, scripts, postProcessResources, _keepBackups,
+                    out var changed);
+                if (changed) AssetDatabase.Refresh();
+
+                if (stats.shaderReferences > 0)
+                {
+                    usage.applied = true;
+                    usage.ignored = false;
+                    _plannedReferences = Math.Max(0, _plannedReferences - stats.shaderReferences);
+                    _message = $"Applied Shader remapping to {usage.label}; replaced {stats.shaderReferences} reference" +
+                               (stats.shaderReferences == 1 ? "." : "s.");
+                    _messageType = MessageType.Info;
+                }
+                else
+                {
+                    usage.applied = !MaterialUsesPlaceholderShader(usage.path, shaderRow.placeholderGuid);
+                    _message = $"No matching Shader placeholder reference remains in {usage.label}.";
+                    _messageType = MessageType.Info;
+                }
+            }
+            catch (Exception e)
+            {
+                _message = $"Could not remap {usage.label}: {e.Message}";
+                _messageType = MessageType.Error;
+                Debug.LogError($"[ReferenceRemapper] Could not rewrite material {usage.path}: {e}");
+            }
+            Repaint();
+        }
+
+        private static bool MaterialUsesPlaceholderShader(string materialPath, string placeholderGuid)
+        {
+            if (!File.Exists(materialPath) || string.IsNullOrEmpty(placeholderGuid)) return false;
+            try
+            {
+                foreach (var line in File.ReadLines(materialPath))
+                {
+                    var trimmed = line.TrimStart(' ', '\t');
+                    if (trimmed.StartsWith("m_Shader: {", StringComparison.Ordinal) &&
+                        TryExtractGuid(trimmed, out var shaderGuid) &&
+                        string.Equals(shaderGuid, placeholderGuid, StringComparison.OrdinalIgnoreCase)) return true;
+                }
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"[ReferenceRemapper] Could not inspect material {materialPath}: {e.Message}");
+            }
+            return false;
+        }
+
+        private void UpdateShaderMaterialUsageStates()
+        {
+            foreach (var shaderRow in _mappings.Where(row => row.kind == ReferenceKind.Shader))
+            foreach (var usage in shaderRow.materialUsages)
+                usage.applied = !MaterialUsesPlaceholderShader(usage.path, shaderRow.placeholderGuid);
+        }
+
         private static SerializedReference CreateReference(UnityEngine.Object asset, int type)
         {
             if (asset == null || !AssetDatabase.TryGetGUIDAndLocalFileIdentifier(asset, out string guid, out long fileId) ||
@@ -672,7 +910,8 @@ namespace Cocokoishi.VRCALoader
             if (applyPostProcessResources) enabledScopes.Add("Post-processing Resource");
             var scope = string.Join(", ", enabledScopes);
             var files = CollectYamlFiles(_selectedRoot);
-            var preview = CountReferences(files, shaders, scripts, postProcessResources);
+            var ignoredShaderMaterials = GetIgnoredShaderMaterialPaths();
+            var preview = CountReferences(files, shaders, scripts, postProcessResources, ignoredShaderMaterials);
             if (preview.Total == 0)
             {
                 _message = $"No matching {scope} placeholder references remain in the selected export.";
@@ -690,6 +929,7 @@ namespace Cocokoishi.VRCALoader
             var applied = new RewriteStats();
             var failures = 0;
             var cancelled = false;
+            var noShaders = new Dictionary<string, SerializedReference>(StringComparer.OrdinalIgnoreCase);
             AssetDatabase.StartAssetEditing();
             try
             {
@@ -704,8 +944,9 @@ namespace Cocokoishi.VRCALoader
 
                     try
                     {
-                        var stats = RewriteYamlFile(files[i], shaders, scripts, postProcessResources, _keepBackups,
-                            out var changed);
+                        var fileShaders = ignoredShaderMaterials.Contains(files[i]) ? noShaders : shaders;
+                        var stats = RewriteYamlFile(files[i], fileShaders, scripts, postProcessResources,
+                            _keepBackups, out var changed);
                         if (changed) modifiedFiles++;
                         applied.shaderReferences += stats.shaderReferences;
                         applied.scriptReferences += stats.scriptReferences;
@@ -725,6 +966,7 @@ namespace Cocokoishi.VRCALoader
             }
 
             if (modifiedFiles > 0) AssetDatabase.Refresh();
+            UpdateShaderMaterialUsageStates();
             _plannedReferences = Math.Max(0, _plannedReferences - applied.Total);
             _message = $"{(cancelled ? "Cancelled after partial completion." : "Remapping complete.")} " +
                        $"Modified {modifiedFiles} files; replaced {applied.shaderReferences} Shader and " +
@@ -807,19 +1049,24 @@ namespace Cocokoishi.VRCALoader
         private static RewriteStats CountReferences(IEnumerable<string> files,
             Dictionary<string, SerializedReference> shaders,
             Dictionary<string, SerializedReference> scripts,
-            Dictionary<string, SerializedReference> postProcessResources)
+            Dictionary<string, SerializedReference> postProcessResources,
+            ISet<string> ignoredShaderMaterialPaths = null)
         {
             var total = new RewriteStats();
+            var noShaders = new Dictionary<string, SerializedReference>(StringComparer.OrdinalIgnoreCase);
             foreach (var path in files)
             {
                 var unityClass = -1;
+                var fileShaders = ignoredShaderMaterialPaths != null && ignoredShaderMaterialPaths.Contains(path)
+                    ? noShaders
+                    : shaders;
                 try
                 {
                     using (var reader = new StreamReader(path, DetectEncoding(path), true))
                     {
                         string line;
                         while ((line = reader.ReadLine()) != null)
-                            RewriteLine(line, ref unityClass, shaders, scripts, postProcessResources, ref total);
+                            RewriteLine(line, ref unityClass, fileShaders, scripts, postProcessResources, ref total);
                     }
                 }
                 catch (Exception e)
@@ -1034,6 +1281,7 @@ namespace Cocokoishi.VRCALoader
         {
             _mappings.Clear();
             _yamlFiles.Clear();
+            _materialSearch = "";
             _plannedReferences = 0;
             _analyzed = false;
             _message = "";
