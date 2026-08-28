@@ -369,7 +369,7 @@ namespace Cocokoishi.VRCALoader
             GUILayout.Space(8);
             EditorGUILayout.BeginVertical();
             GUILayout.Space(4);
-            EditorGUILayout.LabelField("VRCALoader", new GUIStyle(GUI.skin.label) { fontSize = 15, fontStyle = FontStyle.Bold, normal = { textColor = Color.white } }, GUILayout.Height(20));
+            EditorGUILayout.LabelField("VRCALoader v0.3.1", new GUIStyle(GUI.skin.label) { fontSize = 15, fontStyle = FontStyle.Bold, normal = { textColor = Color.white } }, GUILayout.Height(20));
             var headerLinkRect = GUILayoutUtility.GetLastRect();
             EditorGUIUtility.AddCursorRect(headerLinkRect, MouseCursor.Link);
             if (Event.current.type == EventType.MouseDown && headerLinkRect.Contains(Event.current.mousePosition))
