@@ -107,10 +107,6 @@ namespace Cocokoishi.VRCALoader
             EditorGUILayout.LabelField(
                 "Inspired by FACS Utilities; independently implemented under clean-room principles without copied source code.",
                 EditorStyles.wordWrappedMiniLabel);
-            EditorGUILayout.HelpBox(
-                "Use Reference Remapper only to restore content you legally own or are explicitly authorized to recover. " +
-                "Do not use it for unauthorized extraction, copying, redistribution, or any illegal purpose.",
-                MessageType.Warning);
             EditorGUILayout.Space(6);
 
             DrawFolderPicker();

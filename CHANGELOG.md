@@ -2,6 +2,14 @@
 
 All notable changes to this package will be documented in this file.
 
+## [0.3.1] - 2026-08-28
+
+### Added
+- Controller Extract now asks users to confirm that they have legitimate access rights before unpacking an AssetBundle selected from outside `Assets/VRCALoader/VRCA/` or the current user's `AppData/LocalLow/VRChat/VRChat/Avatars/` folder. Users can continue or cancel the extraction.
+
+### Changed
+- Removed the persistent lawful-use warning box from the Reference Remapper window.
+
 ## [0.3.0] - 2026-08-24
 
 ### Added

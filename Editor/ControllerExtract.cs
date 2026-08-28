@@ -21,6 +21,13 @@ namespace Cocokoishi.VRCALoader
         private static readonly string AssetRipperExe = Path.Combine(AssetRipperDir, "AssetRipper.GUI.Free.exe");
         private static readonly string ExportsRoot = Path.GetFullPath(
             Path.Combine(Application.dataPath, "VRCALoader/Exports"));
+        private static readonly string DownloadRoot = Path.GetFullPath(
+            Path.Combine(Application.dataPath, "VRCALoader/VRCA"));
+        private static readonly string VrchatAvatarsDir = Path.GetFullPath(Path.Combine(
+            Path.Combine(Path.GetDirectoryName(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData)) ?? "",
+                "LocalLow"),
+            "VRChat/VRChat/Avatars"));
 
         private const string DownloadUrl =
             "https://github.com/AssetRipper/AssetRipper/releases/download/1.3.14/AssetRipper_win_x64.zip";
@@ -166,7 +173,7 @@ namespace Cocokoishi.VRCALoader
                 GUI.contentColor = Color.white;
 
                 GUI.enabled = false;
-                GUILayout.Button("AssetRipper Running", GUILayout.Height(28));
+                GUILayout.Button("AssetRipper Running:55510", GUILayout.Height(28));
                 GUI.enabled = true;
             }
             EditorGUILayout.EndHorizontal();
@@ -263,11 +270,40 @@ namespace Cocokoishi.VRCALoader
             if (_busy) return;
             if (!File.Exists(_bundlePath)) { _status = "Bundle file not found."; return; }
 
+            if (!IsPathInsideDirectory(_bundlePath, DownloadRoot) &&
+                !IsPathInsideDirectory(_bundlePath, VrchatAvatarsDir) &&
+                !EditorUtility.DisplayDialog(
+                    "Confirm AssetBundle Access",
+                    "Please ensure that you have legitimate access rights to the target AssetBundle you are about to unpack.",
+                    "Continue",
+                    "Cancel"))
+            {
+                _status = "Extraction cancelled.";
+                return;
+            }
+
             _busy = true;
             AssetDatabase.DisallowAutoRefresh();
             _routine = ExtractRoutine();
             EditorApplication.update += Pump;
             Repaint();
+        }
+
+        private static bool IsPathInsideDirectory(string filePath, string directoryPath)
+        {
+            try
+            {
+                var fullPath = Path.GetFullPath(filePath);
+                var fullDirectory = Path.GetFullPath(directoryPath)
+                    .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) +
+                    Path.DirectorySeparatorChar;
+
+                return fullPath.StartsWith(fullDirectory, StringComparison.OrdinalIgnoreCase);
+            }
+            catch (Exception)
+            {
+                return false;
+            }
         }
 
         private void StartAssetRipper()
