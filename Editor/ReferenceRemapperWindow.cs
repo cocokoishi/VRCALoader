@@ -37,7 +37,8 @@ namespace Cocokoishi.VRCALoader
         private enum ReferenceKind
         {
             Shader,
-            Script
+            Script,
+            PostProcessResources
         }
 
         private sealed class SerializedReference
@@ -60,6 +61,7 @@ namespace Cocokoishi.VRCALoader
             public string label;
             public Shader shader;
             public MonoScript script;
+            public UnityEngine.Object resource;
             public SerializedReference target;
         }
 
@@ -67,8 +69,9 @@ namespace Cocokoishi.VRCALoader
         {
             public int shaderReferences;
             public int scriptReferences;
+            public int postProcessResourceReferences;
 
-            public int Total => shaderReferences + scriptReferences;
+            public int Total => shaderReferences + scriptReferences + postProcessResourceReferences;
         }
 
         private readonly List<MappingRow> _mappings = new List<MappingRow>();
@@ -79,6 +82,7 @@ namespace Cocokoishi.VRCALoader
         private Vector2 _scroll;
         private bool _shaderFoldout = true;
         private bool _scriptFoldout = true;
+        private bool _postProcessResourcesFoldout = true;
         private bool _keepBackups = false;
         private bool _analyzed;
         private int _plannedReferences;
@@ -102,7 +106,7 @@ namespace Cocokoishi.VRCALoader
             EditorGUILayout.Space(6);
             EditorGUILayout.LabelField("Reference Remapper", new GUIStyle(EditorStyles.boldLabel) { fontSize = 15 });
             EditorGUILayout.LabelField(
-                "Reconnect AssetRipper placeholder Shader and MonoScript GUIDs to matching assets installed in this project.",
+                "Reconnect AssetRipper placeholder Shader, MonoScript, and post-processing resource GUIDs to matching assets installed in this project.",
                 EditorStyles.wordWrappedMiniLabel);
             EditorGUILayout.LabelField(
                 "Inspired by FACS Utilities; independently implemented under clean-room principles without copied source code.",
@@ -131,6 +135,8 @@ namespace Cocokoishi.VRCALoader
             DrawMappingGroup(ReferenceKind.Shader, ref _shaderFoldout);
             EditorGUILayout.Space(4);
             DrawMappingGroup(ReferenceKind.Script, ref _scriptFoldout);
+            EditorGUILayout.Space(4);
+            DrawMappingGroup(ReferenceKind.PostProcessResources, ref _postProcessResourcesFoldout);
             EditorGUILayout.EndScrollView();
         }
 
@@ -180,20 +186,28 @@ namespace Cocokoishi.VRCALoader
                                   _mappings.Any(m => m.kind == ReferenceKind.Shader && m.target != null);
             var canApplyScripts = _analyzed && _yamlFiles.Count > 0 &&
                                   _mappings.Any(m => m.kind == ReferenceKind.Script && m.target != null);
+            var canApplyPostProcessResources = _analyzed && _yamlFiles.Count > 0 &&
+                                               _mappings.Any(m => m.kind == ReferenceKind.PostProcessResources &&
+                                                                  m.target != null);
 
             EditorGUI.BeginDisabledGroup(!canApplyShaders);
             if (GUILayout.Button("Apply Shaders", GUILayout.Height(28), GUILayout.Width(104)))
-                ApplyRemapping(true, false);
+                ApplyRemapping(true, false, false);
             EditorGUI.EndDisabledGroup();
 
             EditorGUI.BeginDisabledGroup(!canApplyScripts);
             if (GUILayout.Button("Apply Scripts", GUILayout.Height(28), GUILayout.Width(100)))
-                ApplyRemapping(false, true);
+                ApplyRemapping(false, true, false);
             EditorGUI.EndDisabledGroup();
 
-            EditorGUI.BeginDisabledGroup(!canApplyShaders && !canApplyScripts);
+            EditorGUI.BeginDisabledGroup(!canApplyPostProcessResources);
+            if (GUILayout.Button("Apply PostProcessing", GUILayout.Height(28), GUILayout.Width(140)))
+                ApplyRemapping(false, false, true);
+            EditorGUI.EndDisabledGroup();
+
+            EditorGUI.BeginDisabledGroup(!canApplyShaders && !canApplyScripts && !canApplyPostProcessResources);
             if (GUILayout.Button("Apply All", GUILayout.Height(28), GUILayout.Width(82)))
-                ApplyRemapping(true, true);
+                ApplyRemapping(true, true, true);
             EditorGUI.EndDisabledGroup();
             EditorGUILayout.EndHorizontal();
         }
@@ -202,8 +216,9 @@ namespace Cocokoishi.VRCALoader
         {
             var rows = _mappings.Where(m => m.kind == kind).ToList();
             var resolved = rows.Count(m => m.target != null);
+            var groupLabel = kind == ReferenceKind.PostProcessResources ? "Post-processing Resources" : kind + "s";
             foldout = EditorGUILayout.Foldout(foldout,
-                $"{kind}s ({resolved} resolved, {rows.Count - resolved} unresolved)", true);
+                $"{groupLabel} ({resolved} resolved, {rows.Count - resolved} unresolved)", true);
             if (!foldout) return;
 
             foreach (var row in rows)
@@ -223,10 +238,15 @@ namespace Cocokoishi.VRCALoader
                     var picked = (Shader)EditorGUILayout.ObjectField(row.shader, typeof(Shader), false);
                     if (EditorGUI.EndChangeCheck()) SetShaderTarget(row, picked);
                 }
-                else
+                else if (kind == ReferenceKind.Script)
                 {
                     var picked = (MonoScript)EditorGUILayout.ObjectField(row.script, typeof(MonoScript), false);
                     if (EditorGUI.EndChangeCheck()) SetScriptTarget(row, picked);
+                }
+                else
+                {
+                    var picked = EditorGUILayout.ObjectField(row.resource, typeof(UnityEngine.Object), false);
+                    if (EditorGUI.EndChangeCheck()) SetPostProcessResourcesTarget(row, picked);
                 }
                 EditorGUILayout.EndHorizontal();
             }
@@ -258,9 +278,12 @@ namespace Cocokoishi.VRCALoader
                 EditorUtility.DisplayProgressBar("Reference Remapper", "Resolving Script placeholders...", 0.68f);
                 ScanScriptPlaceholders(scriptMetaPaths, typeIndex, scriptIndex);
 
+                EditorUtility.DisplayProgressBar("Reference Remapper", "Resolving post-processing resources...", 0.76f);
+                ScanPostProcessResourcesPlaceholders();
+
                 EditorUtility.DisplayProgressBar("Reference Remapper", "Inspecting YAML references...", 0.82f);
-                BuildLookups(out var shaderLookup, out var scriptLookup);
-                var planned = CountReferences(_yamlFiles, shaderLookup, scriptLookup);
+                BuildLookups(out var shaderLookup, out var scriptLookup, out var postProcessResourcesLookup);
+                var planned = CountReferences(_yamlFiles, shaderLookup, scriptLookup, postProcessResourcesLookup);
                 _plannedReferences = planned.Total;
                 _analyzed = true;
 
@@ -334,6 +357,88 @@ namespace Cocokoishi.VRCALoader
                 }
                 _mappings.Add(row);
             }
+        }
+
+        private void ScanPostProcessResourcesPlaceholders()
+        {
+            var installedResource = FindInstalledPostProcessResources();
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var assetPath in _yamlFiles.Where(path =>
+                         path.EndsWith(".asset", StringComparison.OrdinalIgnoreCase)))
+            {
+                if (!IsExportedPostProcessResources(assetPath)) continue;
+
+                var placeholder = ReadMetaGuid(assetPath + ".meta");
+                if (string.IsNullOrEmpty(placeholder) || !seen.Add(placeholder)) continue;
+
+                var row = new MappingRow
+                {
+                    kind = ReferenceKind.PostProcessResources,
+                    placeholderGuid = placeholder,
+                    sourcePath = assetPath,
+                    label = "PostProcessResources"
+                };
+                SetPostProcessResourcesTarget(row, installedResource, false);
+                _mappings.Add(row);
+            }
+        }
+
+        private UnityEngine.Object FindInstalledPostProcessResources()
+        {
+            const string preferredPath =
+                "Packages/com.unity.postprocessing/PostProcessing/PostProcessResources.asset";
+            var candidates = AssetDatabase.GetAllAssetPaths()
+                .Where(path => path.EndsWith("/PostProcessResources.asset", StringComparison.OrdinalIgnoreCase))
+                .OrderBy(path => string.Equals(path, preferredPath, StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+                .ThenBy(path => path, StringComparer.OrdinalIgnoreCase);
+
+            foreach (var candidatePath in candidates)
+            {
+                var candidate = AssetDatabase.LoadMainAssetAtPath(candidatePath);
+                if (!IsPostProcessResourcesObject(candidate) || AssetIsInsideExport(candidate)) continue;
+                return candidate;
+            }
+            return null;
+        }
+
+        private static bool IsExportedPostProcessResources(string assetPath)
+        {
+            var hasExpectedName = false;
+            var hasShaders = false;
+            var hasComputeShaders = false;
+            try
+            {
+                foreach (var line in File.ReadLines(assetPath))
+                {
+                    var trimmed = line.Trim();
+                    if (trimmed.StartsWith("m_Name:", StringComparison.Ordinal))
+                    {
+                        var value = trimmed.Substring("m_Name:".Length).Trim().Trim('"', '\'');
+                        hasExpectedName = string.Equals(value, "PostProcessResources", StringComparison.Ordinal);
+                    }
+                    else if (string.Equals(trimmed, "shaders:", StringComparison.Ordinal))
+                    {
+                        hasShaders = true;
+                    }
+                    else if (string.Equals(trimmed, "computeShaders:", StringComparison.Ordinal))
+                    {
+                        hasComputeShaders = true;
+                    }
+
+                    if (hasExpectedName && hasShaders && hasComputeShaders) return true;
+                }
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"[ReferenceRemapper] Could not inspect post-processing resource {assetPath}: {e.Message}");
+            }
+            return false;
+        }
+
+        private static bool IsPostProcessResourcesObject(UnityEngine.Object asset)
+        {
+            return asset != null && string.Equals(asset.GetType().FullName,
+                "UnityEngine.Rendering.PostProcessing.PostProcessResources", StringComparison.Ordinal);
         }
 
         private static Dictionary<string, List<Type>> BuildTypeIndex(IEnumerable<Type> importedScriptTypes)
@@ -502,6 +607,21 @@ namespace Cocokoishi.VRCALoader
             if (updateMessage) MappingChanged();
         }
 
+        private void SetPostProcessResourcesTarget(MappingRow row, UnityEngine.Object resource,
+            bool updateMessage = true)
+        {
+            row.resource = IsPostProcessResourcesObject(resource) ? resource : null;
+            row.target = row.resource == null ? null : CreateReference(row.resource, 2);
+            if (row.target != null &&
+                (string.Equals(row.target.guid, row.placeholderGuid, StringComparison.OrdinalIgnoreCase) ||
+                 AssetIsInsideExport(row.resource)))
+            {
+                row.resource = null;
+                row.target = null;
+            }
+            if (updateMessage) MappingChanged();
+        }
+
         private void MappingChanged()
         {
             _message = "Mapping updated. The selected Apply action will rescan the YAML files before writing.";
@@ -524,27 +644,35 @@ namespace Cocokoishi.VRCALoader
         }
 
         private void BuildLookups(out Dictionary<string, SerializedReference> shaders,
-            out Dictionary<string, SerializedReference> scripts)
+            out Dictionary<string, SerializedReference> scripts,
+            out Dictionary<string, SerializedReference> postProcessResources)
         {
             shaders = new Dictionary<string, SerializedReference>(StringComparer.OrdinalIgnoreCase);
             scripts = new Dictionary<string, SerializedReference>(StringComparer.OrdinalIgnoreCase);
+            postProcessResources = new Dictionary<string, SerializedReference>(StringComparer.OrdinalIgnoreCase);
             foreach (var row in _mappings)
             {
                 if (row.target == null) continue;
                 if (row.kind == ReferenceKind.Shader) shaders[row.placeholderGuid] = row.target;
-                else scripts[row.placeholderGuid] = row.target;
+                else if (row.kind == ReferenceKind.Script) scripts[row.placeholderGuid] = row.target;
+                else postProcessResources[row.placeholderGuid] = row.target;
             }
         }
 
-        private void ApplyRemapping(bool applyShaders, bool applyScripts)
+        private void ApplyRemapping(bool applyShaders, bool applyScripts, bool applyPostProcessResources)
         {
-            BuildLookups(out var shaders, out var scripts);
+            BuildLookups(out var shaders, out var scripts, out var postProcessResources);
             if (!applyShaders) shaders.Clear();
             if (!applyScripts) scripts.Clear();
+            if (!applyPostProcessResources) postProcessResources.Clear();
 
-            var scope = applyShaders && applyScripts ? "Shader and Script" : applyShaders ? "Shader" : "Script";
+            var enabledScopes = new List<string>();
+            if (applyShaders) enabledScopes.Add("Shader");
+            if (applyScripts) enabledScopes.Add("Script");
+            if (applyPostProcessResources) enabledScopes.Add("Post-processing Resource");
+            var scope = string.Join(", ", enabledScopes);
             var files = CollectYamlFiles(_selectedRoot);
-            var preview = CountReferences(files, shaders, scripts);
+            var preview = CountReferences(files, shaders, scripts, postProcessResources);
             if (preview.Total == 0)
             {
                 _message = $"No matching {scope} placeholder references remain in the selected export.";
@@ -554,7 +682,8 @@ namespace Cocokoishi.VRCALoader
 
             if (!EditorUtility.DisplayDialog($"Apply {scope} Remapping",
                     $"Rewrite {preview.Total} references across the selected AssetRipper export?\n\n" +
-                    $"Shaders: {preview.shaderReferences}\nScripts: {preview.scriptReferences}",
+                    $"Shaders: {preview.shaderReferences}\nScripts: {preview.scriptReferences}\n" +
+                    $"Post-processing resources: {preview.postProcessResourceReferences}",
                     "Apply", "Cancel")) return;
 
             var modifiedFiles = 0;
@@ -575,10 +704,12 @@ namespace Cocokoishi.VRCALoader
 
                     try
                     {
-                        var stats = RewriteYamlFile(files[i], shaders, scripts, _keepBackups, out var changed);
+                        var stats = RewriteYamlFile(files[i], shaders, scripts, postProcessResources, _keepBackups,
+                            out var changed);
                         if (changed) modifiedFiles++;
                         applied.shaderReferences += stats.shaderReferences;
                         applied.scriptReferences += stats.scriptReferences;
+                        applied.postProcessResourceReferences += stats.postProcessResourceReferences;
                     }
                     catch (Exception e)
                     {
@@ -597,7 +728,8 @@ namespace Cocokoishi.VRCALoader
             _plannedReferences = Math.Max(0, _plannedReferences - applied.Total);
             _message = $"{(cancelled ? "Cancelled after partial completion." : "Remapping complete.")} " +
                        $"Modified {modifiedFiles} files; replaced {applied.shaderReferences} Shader and " +
-                       $"{applied.scriptReferences} Script references." +
+                       $"{applied.scriptReferences} Script and {applied.postProcessResourceReferences} " +
+                       "post-processing resource references." +
                        (failures > 0 ? $" {failures} files failed; see Console." : "");
             _messageType = failures > 0 ? MessageType.Warning : MessageType.Info;
             Repaint();
@@ -606,6 +738,7 @@ namespace Cocokoishi.VRCALoader
         private static RewriteStats RewriteYamlFile(string path,
             Dictionary<string, SerializedReference> shaders,
             Dictionary<string, SerializedReference> scripts,
+            Dictionary<string, SerializedReference> postProcessResources,
             bool keepBackup, out bool changed)
         {
             var encoding = DetectEncoding(path);
@@ -623,7 +756,8 @@ namespace Cocokoishi.VRCALoader
                     string line;
                     while ((line = reader.ReadLine()) != null)
                     {
-                        var rewritten = RewriteLine(line, ref unityClass, shaders, scripts, ref stats);
+                        var rewritten = RewriteLine(line, ref unityClass, shaders, scripts, postProcessResources,
+                            ref stats);
                         if (!string.Equals(line, rewritten, StringComparison.Ordinal)) changed = true;
                         writer.WriteLine(rewritten);
                     }
@@ -672,7 +806,8 @@ namespace Cocokoishi.VRCALoader
 
         private static RewriteStats CountReferences(IEnumerable<string> files,
             Dictionary<string, SerializedReference> shaders,
-            Dictionary<string, SerializedReference> scripts)
+            Dictionary<string, SerializedReference> scripts,
+            Dictionary<string, SerializedReference> postProcessResources)
         {
             var total = new RewriteStats();
             foreach (var path in files)
@@ -684,7 +819,7 @@ namespace Cocokoishi.VRCALoader
                     {
                         string line;
                         while ((line = reader.ReadLine()) != null)
-                            RewriteLine(line, ref unityClass, shaders, scripts, ref total);
+                            RewriteLine(line, ref unityClass, shaders, scripts, postProcessResources, ref total);
                     }
                 }
                 catch (Exception e)
@@ -698,6 +833,7 @@ namespace Cocokoishi.VRCALoader
         private static string RewriteLine(string line, ref int unityClass,
             Dictionary<string, SerializedReference> shaders,
             Dictionary<string, SerializedReference> scripts,
+            Dictionary<string, SerializedReference> postProcessResources,
             ref RewriteStats stats)
         {
             if (TryReadUnityClass(line, out var nextClass)) unityClass = nextClass;
@@ -718,6 +854,14 @@ namespace Cocokoishi.VRCALoader
             {
                 stats.scriptReferences++;
                 return indentation + (monoBehaviourScript ? "m_Script: " : "script: ") + scriptTarget;
+            }
+
+            if (trimmed.StartsWith("m_Resources: {", StringComparison.Ordinal) &&
+                TryExtractGuid(trimmed, out var resourceGuid) &&
+                postProcessResources.TryGetValue(resourceGuid, out var resourceTarget))
+            {
+                stats.postProcessResourceReferences++;
+                return indentation + "m_Resources: " + resourceTarget;
             }
             return line;
         }

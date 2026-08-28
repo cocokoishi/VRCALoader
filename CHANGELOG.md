@@ -10,6 +10,9 @@ All notable changes to this package will be documented in this file.
 ### Changed
 - Removed the persistent lawful-use warning box from the Reference Remapper window.
 
+### Fixed
+- Reference Remapper now detects exported `PostProcessResources` placeholders and can redirect `PostProcessLayer.m_Resources` to the installed Post Processing package resource. This restores the package's real shaders, compute shaders, SMAA lookup textures, and noise textures without broadly replacing unrelated GUID references.
+
 ## [0.3.0] - 2026-08-24
 
 ### Added
