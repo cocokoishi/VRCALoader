@@ -186,14 +186,6 @@ namespace Cocokoishi.VRCALoader
                 platforms.Select(PlatformLabel).ToArray(), GUILayout.Width(130));
             platform = platforms[Mathf.Clamp(nextIndex, 0, platforms.Length - 1)];
             _selectedPlatforms[avatar.id] = platform;
-
-            var package = avatar.unityPackages
-                .Where(p => p != null && string.Equals(p.platform, platform,
-                    StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(p.assetUrl))
-                .FirstOrDefault();
-            if (package != null)
-                EditorGUILayout.LabelField($"Unity {package.unityVersion}",
-                    EditorStyles.miniLabel);
             EditorGUILayout.EndHorizontal();
 
             DrawDownloadControls(avatar.id, platform, () => ShowAvatarBuilds(avatar, platform));
@@ -769,13 +761,7 @@ namespace Cocokoishi.VRCALoader
 
         private static string[] GetPlatforms(ApiAvatar avatar)
         {
-            if (avatar.unityPackages == null) return Array.Empty<string>();
-            return avatar.unityPackages
-                .Where(p => p != null && !string.IsNullOrEmpty(p.platform) && !string.IsNullOrEmpty(p.assetUrl))
-                .Select(p => p.platform)
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .OrderBy(p => PlatformOrder(p))
-                .ToArray();
+            return WorldPlatforms;
         }
 
         private bool MatchesSearch(params string[] values)
