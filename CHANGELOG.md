@@ -2,6 +2,11 @@
 
 All notable changes to this package will be documented in this file.
 
+## [0.3.2] - 2026-09-05
+
+### Fixed
+- Cloud Avatar downloading now compiles in Worlds SDK projects where `ApiAvatar.unityPackages` is not exposed. Avatar platform selection no longer directly depends on that SDK-specific member; the existing build picker continues to read the authoritative `unityPackages` data from the raw API response when a download is started.
+
 ## [0.3.1] - 2026-08-28
 
 ### Added
